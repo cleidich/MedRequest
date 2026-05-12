@@ -31,3 +31,24 @@
 - **Cross-team note (from Basher):** API endpoints confirm with frontend expectations: POST/GET/GET/:id/PATCH `/api/requests`, GET `/api/integration/requests`, POST `/api/integration/forward-emr`, POST `/api/integration/notify`
 - **Cross-team note (from Livingston):** Frontend served from App Service static content path `/` (SPA entry point is `index.html`); no additional server-side routing needed
 
+### 2025-01-14 — Demo Persona Switcher Implementation
+- **Architecture:** Query param-based persona detection (`?persona={slug}#{view}`) with visual picker and badge
+- **New modules:**
+  - `js/personas.js` — IIFE registry with 9 personas (3 tenants × 3 roles); `getFromUrl()`, `getAll()`, `getByTenant()` helpers
+  - `js/views/picker.js` — Persona picker view with 3 tenant cards, 9 persona buttons total
+  - `js/components/persona-badge.js` — Fixed-position badge showing current tenant/user/role with "DEMO MODE" label
+- **Modified files:**
+  - `js/app.js` — Added persona detection on init; shows picker if no persona param and no hash; renders badge when persona active
+  - `public/index.html` — Added script tags for personas.js, picker.js, persona-badge.js in correct load order
+  - `css/styles.css` — Added picker card grid (mobile-responsive), tenant color coding, badge styles (fixed top-right, compact on mobile)
+- **URL scheme:** `/?persona=mercy-patient#patient` → sets tenant/user/role via Auth.set(), renders badge, shows view
+- **Persona IDs:** Match exact IDs from `docs/DEMO-AUTH-DESIGN.md` registry table (A0000000/B0000000/C0000000 tenant prefixes)
+- **UX patterns:**
+  - No persona param + no hash → show picker
+  - Persona param present → set auth, show badge, route to view
+  - "Switch Persona" button → navigate to `/` (clears params, returns to picker)
+- **Styling:** Tenant-specific left borders (Mercy=blue, St.Claire=green, Harbor=orange), hover states, mobile-first grid
+- **Dependencies:** Basher must seed Harbor Medical Center (Tenant #3) before harbor-* personas work
+- **Key insight:** Auth.set() already accepted { tenantId, userId, role } — no changes needed to auth.js
+- **Cross-team update (from Basher):** Harbor Medical Center (Tenant #3) now seeded with 3 users (Henry Park, Isabel Chen, Jack O'Brien) and 2 sample requests. All harbor-* personas are now functional and ready for demos.
+

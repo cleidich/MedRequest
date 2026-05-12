@@ -107,6 +107,80 @@ Basher should confirm these endpoints align with the Express API routes.
 **Impact:**
 All frontend code lives under `src/frontend/`. No framework dependencies. CSS is mobile-first with 600px/900px breakpoints.
 
+### Decision: Demo Persona Switcher (Query Param + Picker UI)
+- **ID:** `demo-auth-001`
+- **Author:** Rusty (design), Linus (implementation)
+- **Date:** 2025-01-14
+- **Status:** Implemented
+- **Scope:** Frontend UX, Demo/Presentation Experience
+
+**Decision:** Implemented a **query parameter-based persona switcher** allowing presenters to instantly switch between 9 curated demo personas (3 hospital tenants × 3 roles) without authentication prompts.
+
+**URL scheme:** `/?persona={tenantSlug}-{role}#{view}`
+
+**Examples:**
+- `/?persona=mercy-patient#patient` → Alice Johnson (patient at Mercy General)
+- `/?persona=stclaire-concierge#concierge` → Frank Lee (concierge at St. Claire)
+- `/?persona=harbor-casemanager#casemanager` → Jack O'Brien (case manager at Harbor Medical)
+
+**UX components:**
+1. **Landing page persona picker** — visual tiles (3 tenant cards, 3 buttons each) shown when navigating to `/` with no persona param
+2. **Persistent persona badge** — floating top-right indicator showing current tenant, user, and role; includes "Switch Persona" button
+3. **Bookmarkable URLs** — presenters can pre-load browser tabs with specific personas
+
+**Implementation:**
+- Frontend-only — parses `?persona=` query param, looks up persona in registry (`personas.js`), calls `Auth.set()`
+- No backend changes — API already accepts `X-Tenant-Id`, `X-User-Id`, `X-User-Role` headers
+- Backward compatible — if no persona param, falls back to existing localStorage defaults
+
+**Files:**
+- `src/personas.js` (NEW) — Registry + helpers
+- `src/picker.js` (NEW) — Persona selection UI
+- `src/persona-badge.js` (NEW) — Demo mode indicator
+- `src/app.js` (MODIFIED) — Persona detection
+- `index.html` (MODIFIED) — Script tags
+- `styles.css` (MODIFIED) — Picker + badge styles
+
+**Persona Registry (9 total):**
+| Persona | Tenant | Name | Role | Tenant ID | User ID |
+|---------|--------|------|------|-----------|---------|
+| mercy-patient | Mercy General | Alice Johnson | patient | A0000000-0000-0000-0000-000000000001 | 10000000-0000-0000-0000-000000000001 |
+| mercy-concierge | Mercy General | Carol Davis | concierge | A0000000-0000-0000-0000-000000000001 | 10000000-0000-0000-0000-000000000003 |
+| mercy-casemanager | Mercy General | Dan Martinez | casemanager | A0000000-0000-0000-0000-000000000001 | 10000000-0000-0000-0000-000000000004 |
+| stclaire-patient | St. Claire | Eve Thompson | patient | B0000000-0000-0000-0000-000000000002 | 20000000-0000-0000-0000-000000000001 |
+| stclaire-concierge | St. Claire | Frank Lee | concierge | B0000000-0000-0000-0000-000000000002 | 20000000-0000-0000-0000-000000000002 |
+| stclaire-casemanager | St. Claire | Grace Kim | casemanager | B0000000-0000-0000-0000-000000000002 | 20000000-0000-0000-0000-000000000003 |
+| harbor-patient | Harbor Medical | Henry Park | patient | C0000000-0000-0000-0000-000000000003 | 30000000-0000-0000-0000-000000000001 |
+| harbor-concierge | Harbor Medical | Isabel Chen | concierge | C0000000-0000-0000-0000-000000000003 | 30000000-0000-0000-0000-000000000002 |
+| harbor-casemanager | Harbor Medical | Jack O'Brien | casemanager | C0000000-0000-0000-0000-000000000003 | 30000000-0000-0000-0000-000000000003 |
+
+**Security Notes:**
+⚠️ **DEMO ONLY** — Not production-ready auth. Query param picker is insecure and must never be used in production. "DEMO MODE" label is a visual reminder.
+
+**Production migration path:**
+- Replace query param picker with OAuth/MSAL login
+- Remove `personas.js` registry
+- Backend validates tokens instead of trusting headers
+- Frontend calls `/api/auth/me` to fetch tenant/user/role
+
+**Impact:**
+- Linus: Frontend persona switcher fully implemented and tested
+- Basher: Must seed Harbor Medical Center (Tenant #3) before harbor-* personas work
+- Rusty: Design confirmed and documented in `docs/DEMO-AUTH-DESIGN.md`
+
+### Decision: User Approval — App Gateway Standard_v2 Cost
+- **ID:** `infra-cost-appgw-001`
+- **Author:** cleidich (via Copilot)
+- **Date:** 2026-05-12
+- **Status:** Approved
+- **Scope:** Infrastructure Cost
+
+**Decision:** App Gateway Standard_v2 cost (~$146/mo) is approved for the POC. Keep App Gateway in the architecture.
+
+**Context:** User directive captured for team memory during infrastructure planning.
+
+**Impact:** Cost baseline is set; team can proceed with App Gateway deployment.
+
 ## Governance
 
 - All meaningful changes require team consensus

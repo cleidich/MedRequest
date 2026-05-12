@@ -43,3 +43,16 @@
 - **Cross-team note (from Livingston):** SQL Server uses managed identity auth (AAD-only), app identity has SQL Server admin role; use `@azure/identity` library for token acquisition
 - **Cross-team note (from Linus):** Frontend API client (`src/frontend/js/api.js`) automatically injects auth headers; confirmed API endpoints match expectations
 
+### 2025-07-14 — Harbor Medical Center Tenant Added
+- **Seed data:** Added third demo tenant (Harbor Medical Center, ID `C0000000-0000-0000-0000-000000000003`) to `db/seed/demo-data.sql`
+- **Users:** Henry Park (patient), Isabel Chen (concierge), Jack O'Brien (case_manager) — UUIDs starting with `30000000-...`
+- **Sample requests:** Two requests from Henry Park (IDs starting with `E0000000-...`) — concierge coffee request and case manager insurance question
+- **Pattern notes:** SQL string escaping for apostrophes (e.g., `Jack O''Brien`), UUID prefix convention (tenants: A/B/C, users: 1x/2x/3x, requests: C/D/E per tenant)
+- **Cross-team note (from Rusty):** Persona switcher design (`docs/DEMO-AUTH-DESIGN.md`) requires third tenant for complete 9-persona demo grid (3 tenants × 3 roles)
+
+### 2025-01-14 — Harbor Medical Center Now Supports Full Persona Switcher
+- **Linus integration:** Frontend persona switcher (`js/personas.js`, `js/views/picker.js`, `js/components/persona-badge.js`) now fully functional with all 9 personas across 3 tenants
+- **Demo ready:** Presenters can now use bookmarkable URLs (`/?persona=harbor-patient#patient`, etc.) to switch between Harbor Medical Center personas without DB seeding delays
+- **Cross-team note (from Linus):** Frontend query-param approach matches Rusty's design doc exactly; 9-persona registry complete with Harbor personas now seeded and functional
+- **Key files:** All persona IDs in `db/seed/demo-data.sql` match those in `src/frontend/js/personas.js` registry
+
