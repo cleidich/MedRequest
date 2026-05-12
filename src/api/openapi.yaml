@@ -1,0 +1,643 @@
+openapi: '3.0.3'
+info:
+  title: MedRequest API
+  description: |
+    Hospital patient communication and concierge request API.
+    Multi-tenant via header-based authentication (demo).
+    Supports patient request submission, staff workflows, and outbound integration forwarding.
+  version: 1.0.0
+  contact:
+    name: MedRequest Team
+
+servers:
+  - url: https://app-medrequest-demo.azurewebsites.net
+    description: Azure App Service (demo)
+  - url: http://localhost:3000
+    description: Local development
+
+tags:
+  - name: Health
+    description: Liveness and readiness probes (no authentication required)
+  - name: Requests
+    description: Patient request CRUD operations
+  - name: Integration
+    description: Outbound integration endpoints for EMR, business office, and notifications
+
+# ---------------------------------------------------------------------------
+# Security schemes
+# ---------------------------------------------------------------------------
+components:
+  securitySchemes:
+    TenantId:
+      type: apiKey
+      in: header
+      name: X-Tenant-Id
+      description: Tenant UUID — identifies the hospital organization
+    UserId:
+      type: apiKey
+      in: header
+      name: X-User-Id
+      description: User UUID — identifies the acting user
+    UserRole:
+      type: apiKey
+      in: header
+      name: X-User-Role
+      description: "User role. Must be one of: patient, concierge, case_manager"
+
+  schemas:
+    # --- Request types ---
+    RequestType:
+      type: string
+      description: |
+        Internal request type. Also accepts form-friendly aliases:
+        comfort → feedback, service → concierge, staff → case_manager
+      enum:
+        - feedback
+        - concierge
+        - case_manager
+
+    RequestStatus:
+      type: string
+      enum:
+        - new
+        - acknowledged
+        - in_progress
+        - resolved
+        - forwarded
+        - closed
+
+    # --- Request resource ---
+    RequestRecord:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: C0000001-0000-0000-0000-000000000001
+        tenant_id:
+          type: string
+          format: uuid
+          example: A0000000-0000-0000-0000-000000000001
+        patient_id:
+          type: string
+          format: uuid
+          example: 10000000-0000-0000-0000-000000000001
+        type:
+          $ref: '#/components/schemas/RequestType'
+        subject:
+          type: string
+          example: Extra blanket request
+        body:
+          type: string
+          nullable: true
+          example: Could I please get an extra blanket for room 402?
+        status:
+          $ref: '#/components/schemas/RequestStatus'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    # --- Request bodies ---
+    CreateRequestBody:
+      type: object
+      required:
+        - type
+        - subject
+      properties:
+        type:
+          type: string
+          description: "Request type (internal or form-friendly alias: comfort, service, staff)"
+          example: concierge
+        subject:
+          type: string
+          example: Extra blanket request
+        body:
+          type: string
+          nullable: true
+          example: Could I please get an extra blanket for room 402?
+
+    UpdateStatusBody:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          $ref: '#/components/schemas/RequestStatus'
+
+    ForwardRequestBody:
+      type: object
+      required:
+        - requestId
+      properties:
+        requestId:
+          type: string
+          format: uuid
+          example: C0000001-0000-0000-0000-000000000001
+
+    NotifyRequestBody:
+      type: object
+      required:
+        - requestId
+      properties:
+        requestId:
+          type: string
+          format: uuid
+          example: C0000001-0000-0000-0000-000000000001
+        message:
+          type: string
+          nullable: true
+          example: Patient has been notified about discharge
+
+    # --- Response shapes ---
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: ok
+        timestamp:
+          type: string
+          format: date-time
+
+    ReadyResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [ready, unavailable]
+        timestamp:
+          type: string
+          format: date-time
+        error:
+          type: string
+          nullable: true
+
+    IntegrationPullResponse:
+      type: object
+      properties:
+        count:
+          type: integer
+          example: 2
+        requests:
+          type: array
+          items:
+            $ref: '#/components/schemas/RequestRecord'
+        query:
+          type: object
+          properties:
+            status:
+              type: string
+              example: new
+            since:
+              type: string
+              format: date-time
+              nullable: true
+        timestamp:
+          type: string
+          format: date-time
+
+    ForwardResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        destination:
+          type: string
+          example: emr
+        requestId:
+          type: string
+          format: uuid
+        previousStatus:
+          $ref: '#/components/schemas/RequestStatus'
+        currentStatus:
+          type: string
+          example: forwarded
+        message:
+          type: string
+          example: Request forwarded to EMR (delivery mocked for POC)
+        timestamp:
+          type: string
+          format: date-time
+
+    NotifyResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        destination:
+          type: string
+          example: notifications
+        requestId:
+          type: string
+          format: uuid
+        message:
+          type: string
+          nullable: true
+        note:
+          type: string
+          example: Notification delivery mocked for POC
+        timestamp:
+          type: string
+          format: date-time
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          example: Missing required auth headers
+
+# ---------------------------------------------------------------------------
+# Paths
+# ---------------------------------------------------------------------------
+paths:
+  # --- Health ---
+  /api/health:
+    get:
+      tags: [Health]
+      summary: Liveness probe
+      description: Returns 200 if the API process is running. No authentication required.
+      operationId: getHealth
+      responses:
+        '200':
+          description: API is alive
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /api/ready:
+    get:
+      tags: [Health]
+      summary: Readiness probe
+      description: Returns 200 only if the database connection is healthy. No authentication required.
+      operationId: getReady
+      responses:
+        '200':
+          description: API and database are ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadyResponse'
+        '503':
+          description: Database connection failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadyResponse'
+              example:
+                status: unavailable
+                error: Database connection failed
+                timestamp: '2026-05-12T10:00:00.000Z'
+
+  # --- Requests ---
+  /api/requests:
+    post:
+      tags: [Requests]
+      summary: Create a new patient request
+      operationId: createRequest
+      security:
+        - TenantId: []
+          UserId: []
+          UserRole: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRequestBody'
+      responses:
+        '201':
+          description: Request created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RequestRecord'
+        '400':
+          description: Validation error (invalid type, missing subject)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid auth headers
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    get:
+      tags: [Requests]
+      summary: List requests for the current tenant
+      operationId: listRequests
+      security:
+        - TenantId: []
+          UserId: []
+          UserRole: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/RequestStatus'
+          description: Filter by request status
+        - name: patientId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+          description: Filter by patient UUID
+      responses:
+        '200':
+          description: Array of request records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RequestRecord'
+        '400':
+          description: Invalid status filter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid auth headers
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/requests/{id}:
+    get:
+      tags: [Requests]
+      summary: Get a single request by ID
+      operationId: getRequest
+      security:
+        - TenantId: []
+          UserId: []
+          UserRole: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Request UUID
+      responses:
+        '200':
+          description: Request record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RequestRecord'
+        '401':
+          description: Missing or invalid auth headers
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Request not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    patch:
+      tags: [Requests]
+      summary: Update request status
+      operationId: updateRequestStatus
+      security:
+        - TenantId: []
+          UserId: []
+          UserRole: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Request UUID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateStatusBody'
+      responses:
+        '200':
+          description: Updated request record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RequestRecord'
+        '400':
+          description: Invalid status value
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid auth headers
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Request not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # --- Integration ---
+  /api/integration/requests:
+    get:
+      tags: [Integration]
+      summary: Pull requests for integration consumers
+      description: External systems poll this endpoint to retrieve new or updated requests.
+      operationId: getIntegrationRequests
+      security:
+        - TenantId: []
+          UserId: []
+          UserRole: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            default: new
+          description: "Filter by status (defaults to 'new')"
+        - name: since
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Only return requests created/updated after this ISO 8601 timestamp
+      responses:
+        '200':
+          description: Integration pull response with matching requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IntegrationPullResponse'
+        '401':
+          description: Missing or invalid auth headers
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/integration/forward-emr:
+    post:
+      tags: [Integration]
+      summary: Forward a request to the EMR system
+      description: Validates the request, updates its status to 'forwarded', and logs the EMR forwarding action.
+      operationId: forwardToEmr
+      security:
+        - TenantId: []
+          UserId: []
+          UserRole: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForwardRequestBody'
+      responses:
+        '200':
+          description: Request forwarded to EMR
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForwardResponse'
+              example:
+                success: true
+                destination: emr
+                requestId: C0000001-0000-0000-0000-000000000001
+                previousStatus: resolved
+                currentStatus: forwarded
+                message: Request forwarded to EMR (delivery mocked for POC)
+                timestamp: '2026-05-12T10:00:00.000Z'
+        '400':
+          description: Missing requestId
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid auth headers
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Request not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/integration/forward-business-office:
+    post:
+      tags: [Integration]
+      summary: Forward a request to the business office
+      description: Validates the request, updates its status to 'forwarded', and logs the business office forwarding action.
+      operationId: forwardToBusinessOffice
+      security:
+        - TenantId: []
+          UserId: []
+          UserRole: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForwardRequestBody'
+      responses:
+        '200':
+          description: Request forwarded to business office
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForwardResponse'
+              example:
+                success: true
+                destination: business_office
+                requestId: C0000001-0000-0000-0000-000000000001
+                previousStatus: resolved
+                currentStatus: forwarded
+                message: Request forwarded to business office (delivery mocked for POC)
+                timestamp: '2026-05-12T10:00:00.000Z'
+        '400':
+          description: Missing requestId
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid auth headers
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Request not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/integration/notify:
+    post:
+      tags: [Integration]
+      summary: Send notification for a request
+      description: Validates the request exists and logs the notification. Actual delivery is mocked for POC.
+      operationId: sendNotification
+      security:
+        - TenantId: []
+          UserId: []
+          UserRole: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotifyRequestBody'
+      responses:
+        '200':
+          description: Notification sent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotifyResponse'
+        '400':
+          description: Missing requestId
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid auth headers
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Request not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'

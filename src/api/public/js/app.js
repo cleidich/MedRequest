@@ -96,12 +96,54 @@ const App = (() => {
     });
   }
 
+  /** Build the APIM toggle widget (only if APIM config was loaded). */
+  function _initApimToggle() {
+    if (!Api.isApimAvailable()) return;
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'apim-toggle-wrap';
+    wrapper.innerHTML = `
+      <label class="apim-toggle" title="Route API calls through Azure APIM">
+        <input type="checkbox" class="apim-toggle-input" />
+        <span class="apim-toggle-slider"></span>
+        <span class="apim-toggle-label">APIM</span>
+      </label>
+      <span class="apim-toast" aria-live="polite"></span>
+    `;
+
+    document.body.appendChild(wrapper);
+
+    const checkbox = wrapper.querySelector('.apim-toggle-input');
+    const toast    = wrapper.querySelector('.apim-toast');
+    checkbox.checked = Api.isApimEnabled();
+
+    checkbox.addEventListener('change', async () => {
+      const enabled = checkbox.checked;
+      Api.setApimEnabled(enabled);
+
+      // Show brief toast
+      toast.textContent = enabled
+        ? 'API calls routing through APIM'
+        : 'API calls routing directly';
+      toast.classList.add('visible');
+      setTimeout(() => toast.classList.remove('visible'), 2500);
+
+      // Warm up APIM with a health ping when toggled on
+      if (enabled) {
+        try { await fetch(Api.getBaseUrl() + '/health'); } catch (_) { /* best-effort */ }
+      }
+    });
+  }
+
   /** Initialize the app. */
   async function init() {
     _initMenu();
 
     // Fetch runtime config (APIM vs direct mode) before any API calls
     await Api.init();
+
+    // Show APIM toggle if config was loaded
+    _initApimToggle();
 
     // Detect persona from URL before rendering
     _detectPersona();

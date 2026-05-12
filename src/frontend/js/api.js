@@ -106,6 +106,11 @@ const Api = (() => {
       return useApim;
     },
 
+    /** Returns true if APIM config was loaded (regardless of active state). */
+    isApimAvailable() {
+      return !!apimBaseUrl;
+    },
+
     // --- Request CRUD ---
 
     /** Create a new patient request. */

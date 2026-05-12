@@ -90,3 +90,12 @@
 - **Behavior:** If config returns `apim.enabled=true`, route through APIM with subscription key header. Otherwise, fall back to direct `/api` calls. Toggle still available for demo flexibility.
 - **Eliminates secret exposure:** No APIM URLs or keys hardcoded in source code; all environment-specific config fetched at runtime
 - **Documented:** Decision `frontend-config-001` in squad/decisions.md
+
+### 2026-05-12 — APIM Toggle Switch for Demo
+- **Purpose:** Added an unobtrusive toggle in the bottom-right corner so demo users can flip between direct API mode and APIM routing on the fly.
+- **api.js:** Added `isApimAvailable()` method — returns `!!apimBaseUrl` (true if APIM config was loaded, regardless of active state). Used by UI to decide whether to show the toggle.
+- **app.js:** Added `_initApimToggle()` function called after `Api.init()`. Dynamically creates a fixed-position toggle widget with checkbox, slider, label, and toast. Wires `change` event to call `Api.setApimEnabled()`, shows a brief toast message, and fires a best-effort `/health` ping to warm up APIM when toggled on.
+- **styles.css:** Added `.apim-toggle-wrap` (fixed bottom-right, z-index 900, 70% opacity fading to 100% on hover), `.apim-toggle` pill with custom slider (28×16px track, 12px knob, primary-blue when checked), `.apim-toast` tooltip that fades in above the toggle for 2.5s.
+- **Conditional display:** Toggle only appears if `Api.isApimAvailable()` returns true — meaning `/api/config` returned valid APIM settings. If config fetch fails or APIM isn't configured, no toggle is rendered.
+- **No HTML changes:** Toggle is created dynamically via JS — no changes to `index.html`.
+- **Sync:** `api.js`, `app.js`, `styles.css` all synced to `src/api/public/`.
