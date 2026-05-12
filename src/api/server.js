@@ -11,6 +11,7 @@ const errorHandler   = require('./middleware/errorHandler');
 const healthRoutes   = require('./routes/health');
 const requestRoutes  = require('./routes/requests');
 const integrationRoutes = require('./routes/integration');
+const debugRoutes       = require('./routes/debug');
 const { closePool }  = require('./db/pool');
 
 const app = express();
@@ -32,6 +33,7 @@ app.use('/api', healthRoutes);
 // ---------------------------------------------------------------------------
 app.use('/api/requests',    auth, tenantContext, requestRoutes);
 app.use('/api/integration', auth, tenantContext, integrationRoutes);
+app.use('/api/debug',       auth, tenantContext, debugRoutes);
 
 // ---------------------------------------------------------------------------
 // Static frontend files (served from public/ directory)

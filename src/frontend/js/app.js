@@ -3,13 +3,14 @@
  * Now includes persona detection and picker routing.
  */
 
-/* global Auth, Personas, PersonaBadge, PickerView, PatientView, ConciergeView, CaseManagerView, document, window */
+/* global Auth, Personas, PersonaBadge, PickerView, PatientView, ConciergeView, CaseManagerView, ExplorerView, document, window */
 
 const App = (() => {
   const VIEWS = {
     patient:     PatientView,
     concierge:   ConciergeView,
     casemanager: CaseManagerView,
+    explorer:    ExplorerView,
   };
 
   const mainEl = () => document.getElementById('app');

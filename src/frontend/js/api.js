@@ -83,5 +83,12 @@ const Api = (() => {
     notify(data) {
       return request('POST', '/integration/notify', data);
     },
+
+    // --- Debug / Explorer ---
+
+    /** Run a pre-built explorer query to demonstrate RLS. */
+    runExplorerQuery(queryKey) {
+      return request('POST', '/debug/explore', { queryKey });
+    },
   };
 })();

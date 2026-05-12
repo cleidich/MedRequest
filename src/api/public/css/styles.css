@@ -821,3 +821,232 @@ select.form-control {
     font-size: 2.25rem;
   }
 }
+
+/* ============================================
+   Explorer / Behind the Scenes Styles
+   ============================================ */
+
+.explorer-view {
+  max-width: 960px;
+  margin: 0 auto;
+}
+
+.explorer-banner {
+  background: linear-gradient(135deg, #e8f4fd 0%, #f0e6ff 100%);
+  border: 2px solid var(--color-primary);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  margin-bottom: 1.5rem;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: var(--color-text);
+}
+
+.explorer-persona-bar {
+  background: var(--color-white);
+  border-left: 5px solid var(--color-primary);
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem;
+  margin-bottom: 1.5rem;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.explorer-persona-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.explorer-persona-tenant {
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+
+.explorer-persona-detail {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}
+
+.explorer-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.explorer-card {
+  background: var(--color-white);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  border-left: 4px solid var(--color-info);
+  transition: box-shadow var(--transition);
+  overflow: hidden;
+}
+
+.explorer-card:hover {
+  box-shadow: var(--shadow-md);
+}
+
+.explorer-card-header {
+  display: flex;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+  align-items: flex-start;
+}
+
+.explorer-card-icon {
+  font-size: 1.5rem;
+  flex-shrink: 0;
+  margin-top: 0.1rem;
+}
+
+.explorer-card-title {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0 0 0.2rem;
+  color: var(--color-text);
+}
+
+.explorer-card-desc {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.explorer-card-actions {
+  padding: 0 1.25rem 1rem;
+}
+
+.explorer-card-results {
+  border-top: 1px solid var(--color-border);
+  padding: 1rem 1.25rem;
+  background: #fafbfc;
+}
+
+.explorer-loading {
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+.explorer-sql {
+  margin-bottom: 0.75rem;
+}
+
+.explorer-sql strong {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  margin-bottom: 0.3rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.explorer-sql pre {
+  background: #1e1e2e;
+  color: #cdd6f4;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-sm);
+  overflow-x: auto;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.explorer-sql code {
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace;
+}
+
+.explorer-row-count {
+  font-size: 0.9rem;
+  margin-bottom: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.explorer-table-wrap {
+  overflow-x: auto;
+  margin-bottom: 0.75rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+}
+
+.explorer-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  min-width: 400px;
+}
+
+.explorer-table th {
+  background: var(--color-primary-light);
+  color: var(--color-primary-dark);
+  font-weight: 600;
+  text-align: left;
+  padding: 0.6rem 0.75rem;
+  white-space: nowrap;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  border-bottom: 2px solid var(--color-primary);
+}
+
+.explorer-table td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text);
+}
+
+.explorer-table td.mono {
+  font-family: 'SF Mono', 'Fira Code', Consolas, monospace;
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+}
+
+.explorer-table tr.odd {
+  background: var(--color-white);
+}
+
+.explorer-table tr.even {
+  background: #f8f9fa;
+}
+
+.explorer-table tr:hover {
+  background: var(--color-primary-light);
+}
+
+.explorer-no-results {
+  text-align: center;
+  color: var(--color-text-muted);
+  font-style: italic;
+  padding: 1rem;
+}
+
+.explorer-rls-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  background: #fff8e1;
+  border: 1px solid #ffe082;
+  border-radius: var(--radius-sm);
+  padding: 0.65rem 0.85rem;
+  font-size: 0.85rem;
+  color: #5d4037;
+  line-height: 1.5;
+}
+
+.rls-icon {
+  flex-shrink: 0;
+  font-size: 1rem;
+}
+
+@media (min-width: 600px) {
+  .explorer-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+    gap: 1rem;
+  }
+}
