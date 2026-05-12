@@ -18,3 +18,14 @@
 - **Key context:** Project decision `project-structure-001` documented in `.squad/decisions.md`
 - **Reference:** See `docs/PROJECT-STRUCTURE.md` for full directory tree and ownership boundaries
 
+### 2025-07-14 — Frontend Scaffold Created
+- **Architecture:** IIFE module pattern (Auth, Api, PatientView, ConciergeView, CaseManagerView, App) — no build step needed.
+- **Router:** Hash-based (`#patient`, `#concierge`, `#casemanager`); `hashchange` event drives view rendering.
+- **Auth:** `Auth` module in `js/auth.js` stores `tenantId`/`userId`/`role` in localStorage; auto-switches userId per role.
+- **API client:** `Api` module in `js/api.js` wraps `fetch`, injects `X-Tenant-Id`/`X-User-Id`/`X-User-Role` headers. Base URL defaults to `/api`.
+- **CSS:** Mobile-first with breakpoints at 600px (tablet) and 900px (desktop). CSS custom properties for theming. Healthcare color scheme (blues).
+- **Status badges:** `.badge-new`, `.badge-in_progress`, `.badge-resolved`, `.badge-forwarded`.
+- **Case Manager stubs:** "Forward to Record" and "Forward to Business Office" send PATCH with `forwarded_to` field.
+- **Key files:** `src/frontend/public/index.html`, `css/styles.css`, `js/app.js`, `js/api.js`, `js/auth.js`, `js/views/{patient,concierge,casemanager}.js`.
+- **Dev server:** `npm start` runs `http-server` on port 3000.
+
