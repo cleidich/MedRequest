@@ -16,6 +16,9 @@ param aadAdminObjectId string
 @description('AAD admin display name')
 param aadAdminName string = 'MedRequest Admin'
 
+@description('Principal type for the AAD admin (User or Application)')
+param aadAdminPrincipalType string = 'User'
+
 @description('AAD admin tenant ID')
 param tenantId string
 
@@ -48,7 +51,7 @@ resource sqlServer 'Microsoft.Sql/servers@2023-08-01-preview' = {
       login: aadAdminName
       sid: aadAdminObjectId
       tenantId: tenantId
-      principalType: 'Application'
+      principalType: aadAdminPrincipalType
     }
     minimalTlsVersion: '1.2'
   }

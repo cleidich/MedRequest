@@ -32,7 +32,7 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
     enableRbacAuthorization: true
     enableSoftDelete: true
     softDeleteRetentionInDays: 7
-    enablePurgeProtection: false // POC — allow purge for easy cleanup
+    // enablePurgeProtection omitted — defaults to not enabled (POC cleanup-friendly)
   }
 }
 

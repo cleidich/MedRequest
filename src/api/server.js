@@ -1,6 +1,7 @@
 'use strict';
 
 const express = require('express');
+const path    = require('path');
 const cors    = require('cors');
 const helmet  = require('helmet');
 const config  = require('./config');
@@ -31,6 +32,14 @@ app.use('/api', healthRoutes);
 // ---------------------------------------------------------------------------
 app.use('/api/requests',    auth, tenantContext, requestRoutes);
 app.use('/api/integration', auth, tenantContext, integrationRoutes);
+
+// ---------------------------------------------------------------------------
+// Static frontend files (served from public/ directory)
+// ---------------------------------------------------------------------------
+app.use(express.static(path.join(__dirname, 'public')));
+app.get('/', (_req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
 
 // ---------------------------------------------------------------------------
 // Error handler (must be last)

@@ -39,18 +39,45 @@ resource publicIp 'Microsoft.Network/publicIPAddresses@2023-11-01' = {
   }
 }
 
+// WAF Policy (replaces deprecated inline webApplicationFirewallConfiguration)
+resource wafPolicy 'Microsoft.Network/ApplicationGatewayWebApplicationFirewallPolicies@2023-11-01' = {
+  name: 'waf-${baseName}'
+  location: location
+  tags: tags
+  properties: {
+    policySettings: {
+      state: 'Enabled'
+      mode: wafMode
+      requestBodyCheck: true
+      maxRequestBodySizeInKb: 128
+      fileUploadLimitInMb: 100
+    }
+    managedRules: {
+      managedRuleSets: [
+        {
+          ruleSetType: 'OWASP'
+          ruleSetVersion: '3.2'
+        }
+      ]
+    }
+  }
+}
+
 resource appGateway 'Microsoft.Network/applicationGateways@2023-11-01' = {
   name: 'appgw-${baseName}'
   location: location
   tags: tags
   properties: {
     sku: {
-      name: 'Standard_v2'
-      tier: 'Standard_v2'
+      name: 'WAF_v2'
+      tier: 'WAF_v2'
     }
     autoscaleConfiguration: {
       minCapacity: 0
       maxCapacity: 2
+    }
+    firewallPolicy: {
+      id: wafPolicy.id
     }
     gatewayIPConfigurations: [
       {
@@ -135,12 +162,6 @@ resource appGateway 'Microsoft.Network/applicationGateways@2023-11-01' = {
         }
       }
     ]
-    webApplicationFirewallConfiguration: {
-      enabled: true
-      firewallMode: wafMode
-      ruleSetType: 'OWASP'
-      ruleSetVersion: '3.2'
-    }
   }
 }
 

@@ -10,7 +10,7 @@ const { getPool, sql } = require('./pool');
  */
 async function setTenantContext(request, tenantId) {
   await request.query(
-    `EXEC sp_set_session_context @key = N'tenant_id', @value = '${tenantId}', @read_only = 1`
+    `EXEC sp_set_session_context @key = N'tenant_id', @value = '${tenantId}'`
   );
   // Note: sp_set_session_context does not support parameterized @value for the
   // session value itself, but tenant_id is validated as a UUID in middleware

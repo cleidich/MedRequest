@@ -63,3 +63,28 @@
 - **Validation cross-reference:** All procedures aligned with actual infrastructure code and deployment scripts
 - **Outcome:** Demo environment now has complete deployment documentation ready for stakeholder execution
 
+### 2026-05-12 — Full Demo Deployment to Azure
+- **Deployment target:** `rg-medrequest-demo` in `centralus`, subscription `ME-MngEnvMCAP351208-cleidich-1`
+- **Infrastructure deployed:** All 10 Bicep modules — identity, networking, monitoring, Key Vault, storage, SQL, App Service, Functions, APIM, App Gateway (WAF_v2)
+- **Bicep bugs fixed before deployment:**
+  1. App Gateway SKU: `Standard_v2` → `WAF_v2` (Standard doesn't support WAF)
+  2. WAF config: Inline `webApplicationFirewallConfiguration` deprecated → migrated to separate `ApplicationGatewayWebApplicationFirewallPolicies` resource
+  3. Key Vault: `enablePurgeProtection: false` not allowed → removed property (defaults to disabled)
+  4. SQL principalType: `Application` → parameterized `aadAdminPrincipalType` (default `User`)
+  5. App Service env vars: `SQL_SERVER`/`SQL_DATABASE` → `DB_SERVER`/`DB_NAME` to match config, added `DB_USE_MANAGED_IDENTITY`, `NODE_ENV`, `PORT`
+  6. Node runtime: `NODE|20-lts` → `NODE|22-lts` (20 no longer supported on Linux App Service)
+- **Application fix (cross-team):** Removed `@read_only = 1` from `sp_set_session_context` in `db/queries.js` — caused pooled connection tenant leakage (Basher should review)
+- **Server change:** Added `express.static` middleware to `server.js` to serve frontend from `public/` directory
+- **Database setup:** Schema migration (001-initial-schema.sql), RLS function/policies, seed data (3 tenants, 10 users, 7 requests)
+- **SQL access:** Created `id-medrequest-demo` user in SQL DB with db_datareader, db_datawriter, EXECUTE roles
+- **Resource names:**
+  - App Service: `app-medrequest-demo` → https://app-medrequest-demo.azurewebsites.net
+  - App Gateway: `appgw-medrequest-demo` → http://132.196.66.25
+  - SQL Server: `sql-medrequest-demo.database.windows.net` / DB: `medrequest`
+  - Key Vault: `kv-medrequest-demo`
+  - APIM: `apim-medrequest-demo` (no APIs configured yet)
+  - Functions: `func-medrequest-demo`
+  - Storage: `stmedrequestdemo`
+- **Verified working:** Health probe, readiness probe, all 3 tenants with RLS, frontend serving, App Gateway passthrough
+- **Known gaps:** APIM has no API definitions (returns 404), Functions not deployed (no function code yet), no custom domain/HTTPS on App Gateway
+

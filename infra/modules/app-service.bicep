@@ -69,7 +69,7 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
     httpsOnly: true
     virtualNetworkSubnetId: appServiceSubnetId
     siteConfig: {
-      linuxFxVersion: 'NODE|20-lts'
+      linuxFxVersion: 'NODE|22-lts'
       alwaysOn: false // B1 supports alwaysOn but keep off for cost
       ftpsState: 'Disabled'
       minTlsVersion: '1.2'
@@ -87,12 +87,24 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
           value: keyVaultUri
         }
         {
-          name: 'SQL_SERVER'
+          name: 'DB_SERVER'
           value: sqlServerFqdn
         }
         {
-          name: 'SQL_DATABASE'
+          name: 'DB_NAME'
           value: sqlDatabaseName
+        }
+        {
+          name: 'DB_USE_MANAGED_IDENTITY'
+          value: 'true'
+        }
+        {
+          name: 'NODE_ENV'
+          value: 'production'
+        }
+        {
+          name: 'PORT'
+          value: '8080'
         }
         {
           name: 'WEBSITE_NODE_DEFAULT_VERSION'
