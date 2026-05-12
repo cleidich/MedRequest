@@ -37,6 +37,9 @@ param appServiceSubnetId string
 @description('Log Analytics Workspace ID for diagnostics')
 param logAnalyticsWorkspaceId string
 
+@description('Key Vault name for Key Vault reference app settings')
+param keyVaultName string
+
 @description('Tags to apply to all resources')
 param tags object = {}
 
@@ -110,7 +113,16 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
           name: 'WEBSITE_NODE_DEFAULT_VERSION'
           value: '~20'
         }
+        {
+          name: 'APIM_GATEWAY_URL'
+          value: '@Microsoft.KeyVault(SecretUri=https://${keyVaultName}.vault.azure.net/secrets/APIM-GATEWAY-URL/)'
+        }
+        {
+          name: 'APIM_SUBSCRIPTION_KEY'
+          value: '@Microsoft.KeyVault(SecretUri=https://${keyVaultName}.vault.azure.net/secrets/APIM-SUBSCRIPTION-KEY/)'
+        }
       ]
+      keyVaultReferenceIdentity: managedIdentityId
     }
   }
 }

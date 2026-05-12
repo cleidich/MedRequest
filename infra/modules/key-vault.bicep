@@ -16,6 +16,13 @@ param managedIdentityPrincipalId string
 @description('Log Analytics Workspace ID for diagnostics')
 param logAnalyticsWorkspaceId string
 
+@description('APIM gateway URL for composing the Key Vault secret value')
+param apimGatewayUrl string = ''
+
+@secure()
+@description('APIM subscription key (provide at deploy time or set post-deploy)')
+param apimSubscriptionKey string = ''
+
 @description('Tags to apply to all resources')
 param tags object = {}
 
@@ -46,6 +53,26 @@ resource secretsUserRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = 
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', keyVaultSecretsUserRoleId)
     principalId: managedIdentityPrincipalId
     principalType: 'ServicePrincipal'
+  }
+}
+
+// --- Key Vault Secrets ---
+
+// APIM gateway URL secret (composed from APIM gateway URL + API path)
+resource secretApimGatewayUrl 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
+  parent: keyVault
+  name: 'APIM-GATEWAY-URL'
+  properties: {
+    value: '${apimGatewayUrl}/medrequest'
+  }
+}
+
+// APIM subscription key secret (sensitive — provided at deploy time or set post-deploy)
+resource secretApimSubscriptionKey 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
+  parent: keyVault
+  name: 'APIM-SUBSCRIPTION-KEY'
+  properties: {
+    value: apimSubscriptionKey
   }
 }
 

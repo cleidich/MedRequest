@@ -26,6 +26,10 @@ param apimPublisherEmail string
 @description('AAD admin object ID for SQL Server')
 param sqlAadAdminObjectId string = ''
 
+@description('APIM subscription key (sensitive — provide at deploy time or set post-deploy)')
+@secure()
+param apimSubscriptionKey string = ''
+
 @description('WAF mode: Detection or Prevention')
 param wafMode string = 'Detection'
 
@@ -41,6 +45,10 @@ param tags object = {
 
 // --- Derived naming ---
 var baseName = '${projectName}-${environment}'
+
+// Deterministic resource names/URLs (avoids circular module dependencies)
+var keyVaultName = 'kv-${baseName}'
+var apimGatewayUrl = 'https://apim-${baseName}.azure-api.net'
 
 // --- Modules ---
 
@@ -74,7 +82,8 @@ module monitoring 'modules/monitoring.bicep' = {
   }
 }
 
-// 4. Key Vault — RBAC-based, grants access to managed identity
+// 4. Key Vault — RBAC-based, grants access to managed identity, stores APIM secrets
+// Uses computed APIM gateway URL to avoid circular dependency (APIM → App Service → Key Vault)
 module keyVault 'modules/key-vault.bicep' = {
   name: 'keyvault-deploy'
   params: {
@@ -82,6 +91,8 @@ module keyVault 'modules/key-vault.bicep' = {
     baseName: baseName
     tenantId: subscription().tenantId
     managedIdentityPrincipalId: identity.outputs.principalId
+    apimGatewayUrl: apimGatewayUrl
+    apimSubscriptionKey: apimSubscriptionKey
     logAnalyticsWorkspaceId: monitoring.outputs.logAnalyticsId
     tags: tags
   }
@@ -125,6 +136,7 @@ module appService 'modules/app-service.bicep' = {
     managedIdentityClientId: identity.outputs.clientId
     appInsightsConnectionString: monitoring.outputs.appInsightsConnectionString
     keyVaultUri: keyVault.outputs.keyVaultUri
+    keyVaultName: keyVaultName
     sqlServerFqdn: sql.outputs.sqlServerFqdn
     sqlDatabaseName: sql.outputs.sqlDatabaseName
     appServiceSubnetId: networking.outputs.appServiceSubnetId

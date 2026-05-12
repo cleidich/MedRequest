@@ -94,6 +94,211 @@ resource diagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' 
   }
 }
 
+// --- API definition: MedRequest API ---
+
+resource api 'Microsoft.ApiManagement/service/apis@2023-09-01-preview' = {
+  parent: apim
+  name: 'medrequest-api'
+  properties: {
+    displayName: 'MedRequest API'
+    path: 'medrequest'
+    protocols: [
+      'https'
+    ]
+    serviceUrl: 'https://${backendHostname}'
+    subscriptionRequired: true
+    subscriptionKeyParameterNames: {
+      header: 'Ocp-Apim-Subscription-Key'
+      query: 'subscription-key'
+    }
+  }
+}
+
+// API-level policy: rate limit, CORS, header passthrough, backend service
+resource apiPolicy 'Microsoft.ApiManagement/service/apis/policies@2023-09-01-preview' = {
+  parent: api
+  name: 'policy'
+  properties: {
+    format: 'xml'
+    value: '''
+<policies>
+  <inbound>
+    <base />
+    <rate-limit calls="100" renewal-period="60" />
+    <cors allow-credentials="true">
+      <allowed-origins>
+        <origin>*</origin>
+      </allowed-origins>
+      <allowed-methods>
+        <method>GET</method>
+        <method>POST</method>
+        <method>PATCH</method>
+        <method>PUT</method>
+        <method>DELETE</method>
+        <method>OPTIONS</method>
+      </allowed-methods>
+      <allowed-headers>
+        <header>*</header>
+      </allowed-headers>
+    </cors>
+    <set-header name="X-Tenant-Id" exists-action="skip" />
+    <set-header name="X-User-Id" exists-action="skip" />
+    <set-header name="X-User-Role" exists-action="skip" />
+    <set-backend-service backend-id="medrequest-backend" />
+  </inbound>
+  <backend>
+    <base />
+  </backend>
+  <outbound>
+    <base />
+  </outbound>
+  <on-error>
+    <base />
+  </on-error>
+</policies>'''
+  }
+  dependsOn: [
+    apimBackend
+  ]
+}
+
+// --- API Operations (11 total, matching live configuration) ---
+
+resource opGetHealth 'Microsoft.ApiManagement/service/apis/operations@2023-09-01-preview' = {
+  parent: api
+  name: 'getHealth'
+  properties: {
+    displayName: 'Liveness probe'
+    method: 'GET'
+    urlTemplate: '/api/health'
+    description: 'Liveness probe'
+  }
+}
+
+resource opGetReady 'Microsoft.ApiManagement/service/apis/operations@2023-09-01-preview' = {
+  parent: api
+  name: 'getReady'
+  properties: {
+    displayName: 'Readiness probe'
+    method: 'GET'
+    urlTemplate: '/api/ready'
+    description: 'Readiness probe'
+  }
+}
+
+resource opListRequests 'Microsoft.ApiManagement/service/apis/operations@2023-09-01-preview' = {
+  parent: api
+  name: 'listRequests'
+  properties: {
+    displayName: 'List requests for the current tenant'
+    method: 'GET'
+    urlTemplate: '/api/requests'
+    description: 'List requests for the current tenant'
+  }
+}
+
+resource opGetRequest 'Microsoft.ApiManagement/service/apis/operations@2023-09-01-preview' = {
+  parent: api
+  name: 'getRequest'
+  properties: {
+    displayName: 'Get a single request by ID'
+    method: 'GET'
+    urlTemplate: '/api/requests/{id}'
+    description: 'Get a single request by ID'
+    templateParameters: [
+      {
+        name: 'id'
+        type: 'string'
+        required: true
+      }
+    ]
+  }
+}
+
+resource opCreateRequest 'Microsoft.ApiManagement/service/apis/operations@2023-09-01-preview' = {
+  parent: api
+  name: 'createRequest'
+  properties: {
+    displayName: 'Create a new patient request'
+    method: 'POST'
+    urlTemplate: '/api/requests'
+    description: 'Create a new patient request'
+  }
+}
+
+resource opUpdateRequestStatus 'Microsoft.ApiManagement/service/apis/operations@2023-09-01-preview' = {
+  parent: api
+  name: 'updateRequestStatus'
+  properties: {
+    displayName: 'Update request status'
+    method: 'PATCH'
+    urlTemplate: '/api/requests/{id}'
+    description: 'Update request status'
+    templateParameters: [
+      {
+        name: 'id'
+        type: 'string'
+        required: true
+      }
+    ]
+  }
+}
+
+resource opGetIntegrationRequests 'Microsoft.ApiManagement/service/apis/operations@2023-09-01-preview' = {
+  parent: api
+  name: 'getIntegrationRequests'
+  properties: {
+    displayName: 'Pull requests for integration consumers'
+    method: 'GET'
+    urlTemplate: '/api/integration/requests'
+    description: 'Pull requests for integration consumers'
+  }
+}
+
+resource opForwardToEmr 'Microsoft.ApiManagement/service/apis/operations@2023-09-01-preview' = {
+  parent: api
+  name: 'forwardToEmr'
+  properties: {
+    displayName: 'Forward a request to the EMR system'
+    method: 'POST'
+    urlTemplate: '/api/integration/forward-emr'
+    description: 'Forward a request to the EMR system'
+  }
+}
+
+resource opForwardToBusinessOffice 'Microsoft.ApiManagement/service/apis/operations@2023-09-01-preview' = {
+  parent: api
+  name: 'forwardToBusinessOffice'
+  properties: {
+    displayName: 'Forward a request to the business office'
+    method: 'POST'
+    urlTemplate: '/api/integration/forward-business-office'
+    description: 'Forward a request to the business office'
+  }
+}
+
+resource opSendNotification 'Microsoft.ApiManagement/service/apis/operations@2023-09-01-preview' = {
+  parent: api
+  name: 'sendNotification'
+  properties: {
+    displayName: 'Send notification for a request'
+    method: 'POST'
+    urlTemplate: '/api/integration/notify'
+    description: 'Send notification for a request'
+  }
+}
+
+resource opDebugExplore 'Microsoft.ApiManagement/service/apis/operations@2023-09-01-preview' = {
+  parent: api
+  name: 'debugExplore'
+  properties: {
+    displayName: 'Behind the Scenes SQL Explorer'
+    method: 'POST'
+    urlTemplate: '/api/debug/explore'
+    description: 'Runs predefined RLS-aware queries against the database for demo purposes.'
+  }
+}
+
 @description('Resource ID of the APIM instance')
 output apimId string = apim.id
 
