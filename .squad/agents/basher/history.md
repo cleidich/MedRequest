@@ -69,3 +69,23 @@
 - **Cross-team coordination (from Linus):** Linus flagged that frontend uses `acknowledged` and `closed` statuses not in DB CHECK constraint. Coordinator fixed constraint in live DB (via Livingston). Frontend type mapping now compatible with form submission.
 - **Deployment note (from Livingston):** All fixes redeployed to `app-medrequest-demo`; Harbor seed data verified in live environment.
 
+### 2026-05-12 — OpenAPI 3.0 Specification Created
+- **File:** `src/api/openapi.yaml` — complete OpenAPI 3.0.3 spec for APIM import
+- **Coverage:** 8 paths, 10 operations (2 health, 4 request CRUD, 4 integration)
+- **Security:** Three `apiKey` security schemes for `X-Tenant-Id`, `X-User-Id`, `X-User-Role` headers
+- **Schemas:** 13 component schemas covering all request/response shapes, including type aliases (comfort→feedback etc.)
+- **Tags:** Health (unauthenticated), Requests, Integration
+- **Servers:** Both production (`app-medrequest-demo.azurewebsites.net`) and local dev (`localhost:3000`)
+- **Purpose:** Enables APIM import to demonstrate API gateway securing and managing backend calls
+- **Cross-team:** Rusty can use this for APIM policy configuration; Livingston can import into APIM Consumption tier
+
+### 2026-05-13 — Debug SQL Explorer Endpoint for RLS Demo
+- **File:** `src/api/routes/debug.js` — POST `/api/debug/explore` endpoint
+- **Purpose:** "Behind the Scenes" demo tool that runs allowlisted SQL queries through the same auth + tenant context middleware, proving RLS filters data transparently
+- **Query allowlist (5 keys):** `my_requests` (requests table), `all_users` (users table), `request_count` (COUNT(*)), `tenant_info` (current tenant lookup), `cross_tenant_proof` (JOIN across requests+tenants — RLS still filters)
+- **Response shape:** `{ queryKey, sql, tenantId, rowCount, rows, rlsNote }` — includes raw SQL text and human-readable RLS explanation with resolved tenant name
+- **Security:** No arbitrary SQL — only catalog keys execute. Auth middleware validates headers before reaching this endpoint.
+- **Registration:** `app.use('/api/debug', auth, tenantContext, debugRoutes)` in `server.js` — same middleware chain as all other authenticated routes
+- **Pattern note:** Reuses `setTenantContext()` from `db/queries.js` + `getPool()` from `db/pool.js` — no new DB patterns introduced
+- **Cross-team:** Linus can build a frontend "Behind the Scenes" panel that posts `{ queryKey }` and displays the SQL + results; Rusty should note this in demo script
+

@@ -283,6 +283,57 @@ All frontend code lives under `src/frontend/`. No framework dependencies. CSS is
 
 **Impact:** All frontend status updates now accepted by database; no constraint violations on demo workflows.
 
+### Decision: OpenAPI 3.0 Spec for APIM Import
+- **ID:** `openapi-spec-001`
+- **Author:** Basher
+- **Date:** 2026-05-12
+- **Status:** Implemented
+- **Scope:** Backend API, API Management
+
+**Decision:** Created a comprehensive OpenAPI 3.0.3 specification at `src/api/openapi.yaml` covering all 10 API operations across 8 paths. The spec is designed for direct import into Azure API Management (APIM) Consumption tier.
+
+**Key Choices:**
+1. **Security modeled as three `apiKey` schemes** (`X-Tenant-Id`, `X-User-Id`, `X-User-Role`) — APIM can enforce these as required headers via policies.
+2. **Health endpoints intentionally have no security requirement** — matches the Express middleware chain where health routes are mounted before the auth middleware.
+3. **Request type aliases documented in schema description** — the `CreateRequestBody.type` field notes that form-friendly names (`comfort`, `service`, `staff`) are accepted alongside internal names.
+4. **All response shapes derived from actual service return values** — no guessing, read directly from route handlers and service functions.
+
+**Impact:**
+- **Livingston:** Can import `src/api/openapi.yaml` into APIM via Azure Portal or Bicep `Microsoft.ApiManagement/service/apis` resource.
+- **Rusty:** Spec is ready for APIM policy authoring (rate limiting, header validation, etc.).
+- **Linus:** No frontend impact — spec documents existing API contract.
+
+### Decision: SQL RLS Demo Strategy — "Behind the Scenes" SQL Explorer Tab
+- **ID:** `sql-explorer-strategy-001`
+- **Author:** Rusty
+- **Date:** 2026-05-12
+- **Status:** Approved
+- **Scope:** Demo Experience, Architecture
+
+**Decision:** Recommended "Behind the Scenes" SQL Explorer tab as the primary strategy for demonstrating row-level security (RLS) isolation in customer demos. User approved recommendation.
+
+**Strategy Analysis:**
+- **Option A (rejected):** Bastion host + SQL Server Management Studio ($25/mo, security risk, operational overhead)
+- **Option B (recommended):** Backend SQL Explorer UI tab built into MedRequest app ($0 cost, demonstrates RLS live, highest demo impact)
+- **Option C (rejected):** Third-party monitoring tool (external vendor, licensing complexity)
+
+**Implementation Plan:**
+1. **Backend** (`/api/sql-explorer` routes): Parameterized queries against demo database; results filtered by persona's `SESSION_CONTEXT('tenant_id')`
+2. **Frontend** (SQL Explorer tab): Case manager view tab showing live schema + query results; read-only, admin-level access only
+3. **Demo Script:** Shows same query returning different results for different tenants — visual proof of RLS isolation
+4. **Safety:** No schema mutations; parameterized queries only; caching to avoid DB load spikes
+
+**Rationale:**
+- Built-in to app = $0 cost vs. $25/mo Bastion
+- Live demonstration is more compelling than external tooling
+- Supports narrative: "You see only YOUR hospital's data — other hospitals' data is invisible"
+
+**Impact:**
+- **Basher:** Build `/api/sql-explorer` backend routes
+- **Linus:** Add SQL Explorer UI tab to case manager view
+- **Livingston:** No infra changes required
+- **Rusty:** Demo narrative now includes live RLS proof point
+
 ## Governance
 
 - All meaningful changes require team consensus

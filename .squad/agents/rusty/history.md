@@ -49,6 +49,19 @@
 - **⚠️ Review item:** Basher to review `@read_only` removal from `sp_set_session_context` — Livingston notes it was necessary for correct multi-tenant behavior with connection pooling but suggests considering alternatives
 - **Architecture validation:** Confirms project structure adopted in earlier decisions; cost baseline approved; all 9 personas bookmarkable and testable
 
+### 2026-05-12 — SQL RLS Demo Strategy Approved
+- **Strategy Analysis:** Evaluated three approaches for live RLS demonstration in customer demos:
+  1. **Option A (Bastion + SSMS):** External SQL tooling, $25/mo cost, security risk, operational overhead — rejected
+  2. **Option B (SQL Explorer tab):** Built-in app feature, $0 cost, live demonstration, highest demo impact — **recommended and user-approved**
+  3. **Option C (Third-party monitoring):** External vendor, licensing complexity — rejected
+- **Recommendation Rationale:** SQL Explorer tab demonstrates RLS isolation without additional infrastructure cost or security risk. Demo script shows: same query (e.g., "list all patients") returns different results for different tenants — proof that RLS is enforcing tenant isolation at the database layer.
+- **Implementation scope:**
+  - **Basher:** Build `/api/sql-explorer` backend routes with parameterized queries; results filtered by persona's `SESSION_CONTEXT('tenant_id')`
+  - **Linus:** Add SQL Explorer UI tab to case manager view (read-only, admin-level)
+  - **Livingston:** No infra changes required; existing DB supports parameterized queries
+- **Demo impact:** Visual proof of multi-tenancy isolation; supports narrative "You see only YOUR hospital's data"
+- **Decision ID:** `sql-explorer-strategy-001` documented in `.squad/decisions.md`
+
 ### 2026-05-13 — Demo Readiness Gap Analysis
 - **Goal:** Identify what's needed to make MedRequest a working, walkable demo
 - **Method:** Code review of all API routes, services, middleware, DB queries, frontend views, and integration
