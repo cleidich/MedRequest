@@ -13,7 +13,7 @@ const Api = (() => {
   let apimBaseUrl = null;
   let apimKey = null;
 
-  async function request(method, path, body) {
+  async function request(method, path, body, _retried) {
     const url = baseUrl + path;
     const headers = {
       'Content-Type': 'application/json',
@@ -25,12 +25,24 @@ const Api = (() => {
     const options = {
       method,
       headers,
+      mode: 'cors',
     };
     if (body) {
       options.body = JSON.stringify(body);
     }
 
-    const res = await fetch(url, options);
+    let res;
+    try {
+      res = await fetch(url, options);
+    } catch (err) {
+      // APIM Consumption tier cold-starts can cause the first request to fail.
+      // Retry once after a short delay before giving up.
+      if (!_retried && useApim) {
+        await new Promise(r => setTimeout(r, 2000));
+        return request(method, path, body, true);
+      }
+      throw new Error(`Could not load ${path}: ${err.message}`);
+    }
 
     if (!res.ok) {
       const text = await res.text().catch(() => res.statusText);
@@ -58,6 +70,11 @@ const Api = (() => {
           apimKey = config.apim.subscriptionKey || null;
           useApim = true;
           baseUrl = apimBaseUrl;
+          // Warm up APIM (Consumption tier cold-start) — fire and forget
+          fetch(apimBaseUrl + '/health', {
+            headers: { 'Ocp-Apim-Subscription-Key': apimKey || '' },
+            mode: 'cors',
+          }).catch(() => {});
         } else {
           apimBaseUrl = null;
           apimKey = null;
