@@ -1,8 +1,9 @@
 /**
  * app.js — MedRequest app bootstrap and hash-based router.
+ * Now includes persona detection and picker routing.
  */
 
-/* global Auth, PatientView, ConciergeView, CaseManagerView, document, window */
+/* global Auth, Personas, PersonaBadge, PickerView, PatientView, ConciergeView, CaseManagerView, document, window */
 
 const App = (() => {
   const VIEWS = {
@@ -12,6 +13,7 @@ const App = (() => {
   };
 
   const mainEl = () => document.getElementById('app');
+  let currentPersona = null;
 
   /** Determine the current route from the URL hash. */
   function _currentRoute() {
@@ -27,9 +29,34 @@ const App = (() => {
     });
   }
 
+  /** Detect and apply persona from URL query params. */
+  function _detectPersona() {
+    const persona = Personas.getFromUrl();
+    if (persona) {
+      currentPersona = persona;
+      Auth.set({
+        tenantId: persona.tenantId,
+        userId: persona.userId,
+        role: persona.role,
+      });
+      PersonaBadge.render(persona);
+      return true;
+    }
+    return false;
+  }
+
   /** Render the view matching the current hash. */
   function _renderView() {
     const route = _currentRoute();
+
+    // If no persona and no hash, show the picker
+    if (!currentPersona && !route) {
+      PersonaBadge.remove();
+      const container = mainEl();
+      container.innerHTML = '';
+      PickerView.render(container);
+      return;
+    }
 
     if (!route) {
       // Default to patient view
@@ -69,6 +96,9 @@ const App = (() => {
   /** Initialize the app. */
   function init() {
     _initMenu();
+
+    // Detect persona from URL before rendering
+    _detectPersona();
 
     // Listen for hash changes (role/view switching)
     window.addEventListener('hashchange', _renderView);
