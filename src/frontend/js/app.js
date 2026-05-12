@@ -64,8 +64,10 @@ const App = (() => {
       return; // hashchange will fire and re-enter
     }
 
-    // Update auth role to match selected view
-    Auth.setRole(route);
+    // Update auth role to match selected view (skip if persona is active — it has real UUIDs)
+    if (!currentPersona) {
+      Auth.setRole(route);
+    }
     _setActiveNav(route);
 
     const container = mainEl();
