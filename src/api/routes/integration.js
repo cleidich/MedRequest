@@ -1,7 +1,6 @@
 'use strict';
 
 const { Router } = require('express');
-const queries = require('../db/queries');
 const integrationService = require('../services/integrationService');
 
 const router = Router();
@@ -33,16 +32,16 @@ router.get('/requests', async (req, res, next) => {
 });
 
 /**
- * POST /api/integration/forward-emr — Forward a request to EMR (stub).
+ * POST /api/integration/forward-emr — Forward a request to EMR.
  * Body: { requestId }
  */
 router.post('/forward-emr', async (req, res, next) => {
   try {
-    const request = await queries.getRequestById(req.user.tenantId, req.body.requestId);
-    if (!request) {
-      return res.status(404).json({ error: 'Request not found' });
+    const { requestId } = req.body;
+    if (!requestId) {
+      return res.status(400).json({ error: 'requestId is required' });
     }
-    const result = await integrationService.forwardToEmr(request);
+    const result = await integrationService.forwardToEmr(req.user.tenantId, requestId);
     res.json(result);
   } catch (err) {
     next(err);
@@ -50,16 +49,33 @@ router.post('/forward-emr', async (req, res, next) => {
 });
 
 /**
- * POST /api/integration/notify — Send notification (stub).
- * Body: { requestId, recipientId, channel }
+ * POST /api/integration/forward-business-office — Forward a request to business office.
+ * Body: { requestId }
+ */
+router.post('/forward-business-office', async (req, res, next) => {
+  try {
+    const { requestId } = req.body;
+    if (!requestId) {
+      return res.status(400).json({ error: 'requestId is required' });
+    }
+    const result = await integrationService.forwardToBusinessOffice(req.user.tenantId, requestId);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/integration/notify — Send notification for a request.
+ * Body: { requestId, message }
  */
 router.post('/notify', async (req, res, next) => {
   try {
-    const result = await integrationService.sendNotification({
-      requestId:   req.body.requestId,
-      recipientId: req.body.recipientId,
-      channel:     req.body.channel,
-    });
+    const { requestId, message } = req.body;
+    if (!requestId) {
+      return res.status(400).json({ error: 'requestId is required' });
+    }
+    const result = await integrationService.sendNotification(req.user.tenantId, requestId, message);
     res.json(result);
   } catch (err) {
     next(err);

@@ -1,59 +1,101 @@
 'use strict';
 
+const queries = require('../db/queries');
+
 /**
- * Outbound integration service — scaffold.
+ * Outbound integration service.
  *
- * Stub functions representing future integrations with EMR systems,
- * communications platforms, and business office workflows.
- * Each function logs intent and returns a mock response for demo purposes.
+ * Routes requests to EMR, business office, and communications systems.
+ * Actual delivery is mocked (POC), but routing, logging, and status updates
+ * are real — requests are looked up, validated, and status-updated in the DB.
  */
 
 /**
  * Forward a request to the EMR system.
- * @param {object} request - The request record
- * @returns {Promise<object>} Mock EMR response
+ * Validates the request exists, updates its status to 'forwarded', and logs the action.
+ * @param {string} tenantId
+ * @param {string} requestId
+ * @returns {Promise<object>}
  */
-async function forwardToEmr(request) {
-  console.log(`[Integration] Would forward request ${request.id} to EMR system`);
+async function forwardToEmr(tenantId, requestId) {
+  const request = await queries.getRequestById(tenantId, requestId);
+  if (!request) {
+    const err = new Error('Request not found');
+    err.statusCode = 404;
+    err.expose = true;
+    throw err;
+  }
+
+  const updated = await queries.updateRequestStatus(tenantId, requestId, 'forwarded');
+  console.log(`[Integration] Forwarded request ${requestId} to EMR system (tenant: ${tenantId})`);
+
   return {
     success: true,
     destination: 'emr',
-    requestId: request.id,
-    message: 'EMR integration not yet implemented — stub response',
-    timestamp: new Date().toISOString(),
-  };
-}
-
-/**
- * Send a notification via the communications system.
- * @param {object} params - { requestId, recipientId, channel }
- * @returns {Promise<object>} Mock notification response
- */
-async function sendNotification({ requestId, recipientId, channel }) {
-  console.log(`[Integration] Would notify ${recipientId} via ${channel} for request ${requestId}`);
-  return {
-    success: true,
-    destination: 'communications',
-    channel: channel || 'in-app',
-    requestId,
-    recipientId,
-    message: 'Communications integration not yet implemented — stub response',
+    requestId: updated.id,
+    previousStatus: request.status,
+    currentStatus: updated.status,
+    message: 'Request forwarded to EMR (delivery mocked for POC)',
     timestamp: new Date().toISOString(),
   };
 }
 
 /**
  * Forward a request to the business office.
- * @param {object} request - The request record
- * @returns {Promise<object>} Mock business office response
+ * Validates the request exists, updates its status to 'forwarded', and logs the action.
+ * @param {string} tenantId
+ * @param {string} requestId
+ * @returns {Promise<object>}
  */
-async function forwardToBusinessOffice(request) {
-  console.log(`[Integration] Would forward request ${request.id} to business office`);
+async function forwardToBusinessOffice(tenantId, requestId) {
+  const request = await queries.getRequestById(tenantId, requestId);
+  if (!request) {
+    const err = new Error('Request not found');
+    err.statusCode = 404;
+    err.expose = true;
+    throw err;
+  }
+
+  const updated = await queries.updateRequestStatus(tenantId, requestId, 'forwarded');
+  console.log(`[Integration] Forwarded request ${requestId} to business office (tenant: ${tenantId})`);
+
   return {
     success: true,
     destination: 'business_office',
+    requestId: updated.id,
+    previousStatus: request.status,
+    currentStatus: updated.status,
+    message: 'Request forwarded to business office (delivery mocked for POC)',
+    timestamp: new Date().toISOString(),
+  };
+}
+
+/**
+ * Send a notification for a request.
+ * Validates the request exists, logs the notification action.
+ * Actual notification delivery is mocked.
+ * @param {string} tenantId
+ * @param {string} requestId
+ * @param {string} [message]
+ * @returns {Promise<object>}
+ */
+async function sendNotification(tenantId, requestId, message) {
+  const request = await queries.getRequestById(tenantId, requestId);
+  if (!request) {
+    const err = new Error('Request not found');
+    err.statusCode = 404;
+    err.expose = true;
+    throw err;
+  }
+
+  console.log(`[Integration] Notification sent for request ${requestId} (tenant: ${tenantId}): ${message || '(no message)'}`);
+
+  return {
+    success: true,
+    destination: 'notifications',
     requestId: request.id,
-    message: 'Business office integration not yet implemented — stub response',
+    message: message || null,
+    note: 'Notification delivery mocked for POC',
     timestamp: new Date().toISOString(),
   };
 }

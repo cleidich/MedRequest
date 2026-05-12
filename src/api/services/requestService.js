@@ -2,8 +2,27 @@
 
 const queries = require('../db/queries');
 
+// Map user-friendly form types to internal API types.
+// The patient form sends comfort/service/staff; the DB stores feedback/concierge/case_manager.
+const TYPE_MAP = {
+  comfort: 'feedback',
+  service: 'concierge',
+  staff:   'case_manager',
+};
+
 const VALID_TYPES    = ['feedback', 'concierge', 'case_manager'];
 const VALID_STATUSES = ['new', 'in_progress', 'resolved', 'forwarded'];
+
+/**
+ * Normalize a request type — accepts both form-friendly and internal names.
+ * @param {string} type
+ * @returns {string} Internal type name
+ */
+function normalizeType(type) {
+  if (!type) return type;
+  const mapped = TYPE_MAP[type.toLowerCase()];
+  return mapped || type;
+}
 
 /**
  * Create a new patient request.
@@ -12,8 +31,10 @@ const VALID_STATUSES = ['new', 'in_progress', 'resolved', 'forwarded'];
  * @throws {Error} On validation failure
  */
 async function createRequest({ tenantId, patientId, type, subject, body }) {
+  type = normalizeType(type);
+
   if (!VALID_TYPES.includes(type)) {
-    const err = new Error(`Invalid request type. Must be one of: ${VALID_TYPES.join(', ')}`);
+    const err = new Error(`Invalid request type. Must be one of: ${VALID_TYPES.join(', ')} (or: ${Object.keys(TYPE_MAP).join(', ')})`);
     err.statusCode = 400;
     err.expose = true;
     throw err;

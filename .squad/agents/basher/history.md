@@ -59,3 +59,11 @@
 - **Cross-team:** Livingston completed deployment; Basher should review the `@read_only` removal; Linus confirmed frontend integration points; Rusty noted APIM needs API definitions
 - **Next:** Basher to review session context isolation; Rusty to finalize API contract for APIM import; all demo personas operational (9 total across 3 hospitals)
 
+### 2026-05-12 — Backend Gap Fixes for Demo Readiness
+- **Type mapping:** Added `normalizeType()` in `requestService.js` that maps form-friendly types (`comfort`→`feedback`, `service`→`concierge`, `staff`→`case_manager`) before validation. Both form names and internal names are accepted. Mapping happens before the `VALID_TYPES` check.
+- **Integration endpoints wired up:** Rewrote `integrationService.js` from stubs to real service functions. Each function now: (1) validates request exists via `queries.getRequestById` with tenant RLS, (2) updates request status to `forwarded` via `queries.updateRequestStatus`, (3) logs the action, (4) returns structured response with previous/current status. Added `POST /forward-business-office` route. All three endpoints (`forward-emr`, `forward-business-office`, `notify`) validate `requestId` in the route handler before calling the service.
+- **Status constraint note:** Used existing `forwarded` status (allowed by DB CHECK constraint) rather than introducing new statuses like `forwarded_emr` — avoids schema migration for POC.
+- **Harbor Medical seed data:** Added 2 new sample requests (feedback + concierge) for Henry Park, bringing Harbor Medical from 2 to 4 requests — matching the density of Mercy General and St. Claire.
+- **@read_only review (completed):** Confirmed Livingston's removal of `@read_only` from `sp_set_session_context` is correct. With connection pooling, `@read_only=1` makes the session variable immutable for the connection's lifetime — meaning reused connections can't reset tenant context, causing cross-tenant data leaks. Without `@read_only`, each query call properly resets the tenant context. The per-query `setTenantContext()` pattern already provides adequate isolation. No further changes needed.
+- **Key pattern:** Integration service functions now take `(tenantId, requestId)` instead of a pre-fetched request object — keeps validation and RLS enforcement inside the service layer, not the route.
+

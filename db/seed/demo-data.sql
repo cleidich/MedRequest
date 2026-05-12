@@ -113,7 +113,23 @@ INSERT INTO requests (id, tenant_id, patient_id, type, subject, body, status) VA
      'case_manager',
      'Insurance coverage question',
      'I need help understanding what my insurance will cover for the recommended physical therapy.',
-     'in_progress');
+     'in_progress'),
+
+    ('E0000000-0000-0000-0000-000000000003',
+     'C0000000-0000-0000-0000-000000000003',
+     '30000000-0000-0000-0000-000000000001',
+     'feedback',
+     'Excellent physical therapy team',
+     'The PT staff on the second floor have been incredibly supportive and encouraging during my recovery. Thank you!',
+     'resolved'),
+
+    ('E0000000-0000-0000-0000-000000000004',
+     'C0000000-0000-0000-0000-000000000003',
+     '30000000-0000-0000-0000-000000000001',
+     'concierge',
+     'Wi-Fi access',
+     'Is there a guest Wi-Fi network I can connect to? I need to join a video call with my family this evening.',
+     'new');
 
 -- Re-enable RLS
 ALTER SECURITY POLICY dbo.UsersFilter    WITH (STATE = ON);
