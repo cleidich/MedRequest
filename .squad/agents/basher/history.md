@@ -89,3 +89,18 @@
 - **Pattern note:** Reuses `setTenantContext()` from `db/queries.js` + `getPool()` from `db/pool.js` — no new DB patterns introduced
 - **Cross-team:** Linus can build a frontend "Behind the Scenes" panel that posts `{ queryKey }` and displays the SQL + results; Rusty should note this in demo script
 
+### 2026-05-13 — Frontend Config Endpoint for APIM Integration
+- **File:** `src/api/routes/config.js` — GET `/api/config` endpoint
+- **Purpose:** Serves APIM gateway configuration to the frontend from environment variables (`APIM_GATEWAY_URL`, `APIM_SUBSCRIPTION_KEY`) — no secrets hardcoded
+- **Behavior:** If `APIM_GATEWAY_URL` is set, returns `{ apim: { enabled: true, baseUrl, subscriptionKey } }`. If unset (local dev), returns `{ apim: { enabled: false } }` so frontend falls back to direct `/api` calls.
+- **Auth:** Public endpoint — no auth middleware. Registered alongside health routes in `server.js`. The subscription key is a client-side API key (APIM expects it in request headers), not a user secret.
+- **Pattern note:** Reads `process.env` directly at request time — no caching, keeps it simple for POC
+- **Cross-team:** Linus should fetch `/api/config` on app init to decide whether to route API calls through APIM or direct; Livingston has already wired the env vars via Key Vault references in App Service settings
+
+
+### 2026-05-13 — Key Vault Config Pattern Integration (Orchestration Summary)
+- **Part of:** Three-agent integration (Livingston storing secrets, Basher serving config, Linus fetching at startup)
+- **Backend's role:** Expose environment-resolved secrets via public `/api/config` endpoint
+- **Config endpoint pattern:** Read process.env variables (resolved from Key Vault by App Service) and return to frontend as JSON. Public because subscription key is client-side, same exposure as any SPA calling a gateway.
+- **Graceful degradation:** Return `enabled: false` when APIM env vars not set (supports local dev without APIM configuration)
+- **Documented:** Decision `config-endpoint-001` in squad/decisions.md

@@ -114,3 +114,44 @@
 - **Frontend:** Serving from App Service root path, all views responsive ✅
 - **Seeding:** Balanced data density across 3 hospitals (4 requests each minimum) ✅
 
+### 2026-05-12 — APIM Wired to App Service Backend
+- **Context:** Imported OpenAPI spec into APIM and configured as API gateway layer for demo
+- **API imported:** `medrequest-api` at path `/medrequest` on `apim-medrequest-demo`
+- **Backend:** Uses the existing `medrequest-backend` named backend (from Bicep) pointing to `https://app-medrequest-demo.azurewebsites.net`
+- **Policies configured:**
+  - Rate limiting: 100 calls/minute per subscription (demonstrates throttling)
+  - CORS: App Service origin + localhost allowed, credentials enabled
+  - Header forwarding: X-Tenant-Id, X-User-Id, X-User-Role pass through to backend
+  - Backend service set to named backend `medrequest-backend`
+- **Subscription created:** `medrequest-demo-sub` scoped to the MedRequest API
+- **Primary key:** `70cee38f45ec4aeaaffc2eb7aa62f1ca`
+- **Secondary key:** `2836fb5f5541483d9a5126581fa74c52`
+- **Gateway URL:** `https://apim-medrequest-demo.azure-api.net`
+- **API base path:** `https://apim-medrequest-demo.azure-api.net/medrequest/api/...`
+- **Verified:** Health probe and authenticated requests endpoint both return 200 through APIM
+- **CLI note:** `az apim api policy` and `az apim subscription` commands not available in this CLI version — used `az rest` with ARM REST API directly
+- **Conversion note:** OpenAPI YAML → JSON conversion required for APIM import CLI
+- **Cross-team (Linus):** Frontend can optionally route API calls through APIM by setting base URL to `https://apim-medrequest-demo.azure-api.net/medrequest` and adding `Ocp-Apim-Subscription-Key` header
+
+### 2026-05-12 — APIM Secrets Stored in Key Vault with App Service References
+- **Context:** Security requirement — no hard-coded secrets or URLs in app code; retrieve from Key Vault at runtime
+- **Secrets stored in `kv-medrequest-demo`:**
+  - `apim-gateway-url` → `https://apim-medrequest-demo.azure-api.net/medrequest/api`
+  - `apim-subscription-key` → `70cee38f45ec4aeaaffc2eb7aa62f1ca`
+- **RBAC grants:**
+  - Current user (`58d93bbd-...`) granted `Key Vault Secrets Officer` (to write secrets)
+  - App Service managed identity (`id-medrequest-demo`, principal `5e8003ea-...`) granted `Key Vault Secrets User` (to read secrets at runtime)
+- **App Service config:**
+  - `APIM_GATEWAY_URL` → `@Microsoft.KeyVault(SecretUri=https://kv-medrequest-demo.vault.azure.net/secrets/apim-gateway-url/)`
+  - `APIM_SUBSCRIPTION_KEY` → `@Microsoft.KeyVault(SecretUri=https://kv-medrequest-demo.vault.azure.net/secrets/apim-subscription-key/)`
+  - `keyVaultReferenceIdentity` set to user-assigned identity `id-medrequest-demo` (required because App Service uses user-assigned, not system-assigned identity)
+- **Verified:** App restarted, health probe returns OK, settings resolve via Key Vault references
+- **Key Vault reference gotcha:** When App Service uses a user-assigned managed identity (not system-assigned), you must explicitly set `keyVaultReferenceIdentity` to the identity resource ID — otherwise Key Vault references fail silently
+- **Cross-team (Basher):** Backend can now read `process.env.APIM_GATEWAY_URL` and `process.env.APIM_SUBSCRIPTION_KEY` — values are resolved from Key Vault at startup, no secrets in code
+
+
+### 2026-05-12 — Key Vault Config Pattern Documented
+- **Context:** Three-agent integration of secret storage + config endpoint + frontend runtime fetch
+- **Pattern established:** All secrets (APIM keys, gateway URLs) stored in Key Vault, referenced via App Service app settings using Key Vault reference syntax
+- **Key learning:** When App Service uses user-assigned managed identity, explicitly set `keyVaultReferenceIdentity` in app settings — otherwise references fail silently
+- **Handoff:** Pattern documented in orchestration log and decisions.md (decision `keyvault-refs-001`). All future secret handling should follow this model.

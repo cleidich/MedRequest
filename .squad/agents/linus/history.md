@@ -64,3 +64,29 @@
 - **Cross-team coordination (from Livingston):** Frontend redeployed to `app-medrequest-demo`; served from App Service root path; all workflows tested end-to-end.
 - **Status constraint note:** Flagged that `acknowledged` and `closed` statuses were missing from DB CHECK constraint. Coordinator fixed via Livingston's DB update. All 8 status values now supported.
 
+### 2026-05-12 — Explorer "Behind the Scenes" View
+- **New view:** `src/frontend/js/views/explorer.js` — `ExplorerView` IIFE module, follows existing view pattern
+- **Route:** `#explorer` added to `app.js` VIEWS map; nav tab added after Case Manager with 🔬 icon
+- **Query cards:** 5 pre-built cards (My Requests, All Users, Request Count, Tenant Info, Cross-Tenant Proof) — each shows description, Run Query button, SQL output, row count, results table, and RLS explanation note
+- **API method:** `Api.runExplorerQuery(queryKey)` added — POSTs to `/api/debug/explore` with `{ queryKey }`
+- **UX:** Prominent banner explaining RLS demo, persona-aware tenant bar with color coding (Mercy=blue, St.Claire=green, Harbor=orange), zebra-striped results table with monospace IDs
+- **CSS:** Explorer styles added to `styles.css` — dark code blocks, responsive card grid (single column mobile, auto-fit grid on tablet+), table with horizontal scroll
+- **Sync:** All modified files copied to `src/api/public/` with root-relative paths (learned from deploy-demo-001 bug)
+- **Depends on Basher:** Backend `POST /api/debug/explore` endpoint must exist and return `{ sql, rows, rlsNote }` — see `.squad/decisions/inbox/basher-sql-explorer.md` for contract
+
+### 2026-05-12 — Runtime Config Fetch (No Hardcoded Secrets)
+- **Problem:** `api.js` had hardcoded APIM URL and subscription key — security risk and breaks across environments.
+- **Solution:** Added `Api.init()` that fetches `GET /api/config` at startup. Backend returns `{ apim: { enabled, baseUrl, subscriptionKey } }`.
+- **api.js changes:** Removed `APIM_BASE` and `APIM_KEY` constants. Added `init()` method, `apimBaseUrl`/`apimKey` state vars. `setApimEnabled()` now toggles between fetched APIM URL and `/api` (not hardcoded). Subscription key header only sent when APIM mode active and key exists. Graceful fallback to direct `/api` if config fetch fails.
+- **app.js changes:** `init()` is now `async`, calls `await Api.init()` before persona detection or rendering. `DOMContentLoaded` handler wraps in arrow function to handle the returned promise.
+- **Sync:** Both files synced to `src/api/public/js/`.
+- **Depends on Basher:** `GET /api/config` endpoint must exist and return the expected shape. See `.squad/decisions/inbox/basher-config-endpoint.md`.
+- **Directive:** Per team directive — never hardcode secrets or environment-specific URLs in source code.
+
+
+### 2026-05-12 — Key Vault Config Pattern Integration (Orchestration Summary)
+- **Part of:** Three-agent integration (Livingston storing secrets, Basher serving config, Linus fetching at startup)
+- **Frontend's role:** Call `/api/config` at app initialization, use returned APIM settings to route subsequent API calls
+- **Behavior:** If config returns `apim.enabled=true`, route through APIM with subscription key header. Otherwise, fall back to direct `/api` calls. Toggle still available for demo flexibility.
+- **Eliminates secret exposure:** No APIM URLs or keys hardcoded in source code; all environment-specific config fetched at runtime
+- **Documented:** Decision `frontend-config-001` in squad/decisions.md

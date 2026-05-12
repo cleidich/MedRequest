@@ -334,7 +334,191 @@ All frontend code lives under `src/frontend/`. No framework dependencies. CSS is
 - **Livingston:** No infra changes required
 - **Rusty:** Demo narrative now includes live RLS proof point
 
-## Governance
+### Decision: APIM Secrets via Key Vault References
+
+- **ID:** `keyvault-refs-001`
+- **Author:** Livingston (Infra/DevOps)
+- **Date:** 2026-05-12
+- **Status:** Implemented
+- **Scope:** Security, Infrastructure
+
+**Decision:** Store APIM gateway URL and subscription key as Key Vault secrets, and expose them to the App Service as Key Vault reference app settings. The Node.js backend reads them from `process.env` — no secrets in code.
+
+**Details:**
+- **Secrets:** `apim-gateway-url` and `apim-subscription-key` in `kv-medrequest-demo`
+- **App Settings:** `APIM_GATEWAY_URL` and `APIM_SUBSCRIPTION_KEY` (Key Vault references)
+- **Identity:** User-assigned managed identity `id-medrequest-demo` used for Key Vault access (RBAC: `Key Vault Secrets User`)
+- **Pattern:** All future secrets should follow this same pattern — store in Key Vault, reference via app settings
+
+**Impact:**
+- **Basher:** Use `process.env.APIM_GATEWAY_URL` and `process.env.APIM_SUBSCRIPTION_KEY` in backend code — values are resolved from Key Vault automatically
+- **Linus:** No frontend impact (frontend doesn't call APIM directly with keys)
+- **Security:** No secrets committed to code or config files; rotation requires only Key Vault secret update + app restart
+
+### Decision: Public /api/config Endpoint for APIM Settings
+
+- **ID:** `config-endpoint-001`
+- **Author:** Basher
+- **Date:** 2026-05-13
+- **Status:** Implemented
+- **Scope:** Backend API
+
+**Decision:** Created a public `GET /api/config` endpoint (no auth middleware) that reads environment variables and returns APIM configuration as JSON. If `APIM_GATEWAY_URL` is not set (e.g., local dev), returns `enabled: false` so the frontend can fall back to direct `/api` calls.
+
+**Rationale:**
+- **No hardcoded secrets:** Values come from env vars (backed by Key Vault references in Azure)
+- **Public endpoint:** The APIM subscription key is a client-side API key (sent in request headers to APIM), not a user secret — same exposure model as any SPA calling an API gateway
+- **Graceful degradation:** `enabled: false` fallback means the app works locally without APIM configuration
+
+**Impact:**
+- **Linus:** Frontend should call `/api/config` on init to determine API routing
+- **Livingston:** No infra changes needed — env vars already wired
+
+### Decision: Frontend Fetches Config at Runtime
+
+- **ID:** `frontend-config-001`
+- **Author:** Linus
+- **Date:** 2026-05-12
+- **Status:** Implemented
+- **Scope:** Frontend / API contract
+
+**Decision:** The frontend no longer contains any hardcoded APIM URLs or subscription keys. Instead, `Api.init()` fetches runtime configuration from `GET /api/config` at app startup (before any other API calls).
+
+**Behavior:**
+- If `apim.enabled` is `true` in the config response, the frontend routes all API calls through the APIM gateway URL and attaches the `Ocp-Apim-Subscription-Key` header using the fetched key.
+- If `apim.enabled` is `false` (or the config endpoint is unreachable), the frontend falls back to direct `/api` calls with no subscription key header.
+- The `setApimEnabled()` toggle is preserved for demo flexibility — it switches between the *fetched* APIM URL and `/api`, not hardcoded values.
+
+**Contract with Backend:**
+Frontend expects `GET /api/config` to return:
+```json
+{
+  "apim": {
+    "enabled": true,
+    "baseUrl": "https://apim-medrequest-demo.azure-api.net/medrequest/api",
+    "subscriptionKey": "..."
+  }
+}
+```
+
+**Rationale:**
+- Eliminates secrets from source control
+- Supports environment-specific configuration without rebuilds
+- Graceful degradation if config endpoint is unavailable
+
+**Impact:**
+- **Files changed:** `src/frontend/js/api.js` (removed constants, added `init()`), `src/frontend/js/app.js` (await `Api.init()` before render)
+- All synced to `src/api/public/`
+
+### Decision: APIM Wired as API Gateway for Demo
+
+- **ID:** `apim-wiring-001`
+- **Author:** Livingston
+- **Date:** 2026-05-12
+- **Status:** Implemented
+- **Scope:** Infrastructure, API Management
+
+**Decision:** Imported the MedRequest OpenAPI spec into APIM and configured it as a security/management proxy layer between the frontend and App Service backend.
+
+**Configuration:**
+- **API ID:** `medrequest-api` at path `/medrequest`
+- **Gateway URL:** `https://apim-medrequest-demo.azure-api.net`
+- **Full API base:** `https://apim-medrequest-demo.azure-api.net/medrequest/api/...`
+- **Backend:** Named backend `medrequest-backend` → `https://app-medrequest-demo.azurewebsites.net`
+- **Subscription:** `medrequest-demo-sub` (primary key: `70cee38f45ec4aeaaffc2eb7aa62f1ca`)
+
+**Policies Applied:**
+1. Rate limiting: 100 calls/minute per subscription (demonstrates API throttling)
+2. CORS: Allows App Service origin + localhost with credentials
+3. Backend routing: Uses named backend from Bicep provisioning
+4. Auth headers: X-Tenant-Id, X-User-Id, X-User-Role forwarded to backend
+
+**Testing:** Health probe and authenticated requests endpoint verified working through APIM (HTTP 200).
+
+**Impact:**
+- **Linus:** To route through APIM, set API base URL to `https://apim-medrequest-demo.azure-api.net/medrequest` and add `Ocp-Apim-Subscription-Key: 70cee38f45ec4aeaaffc2eb7aa62f1ca` header to all requests. Direct App Service access still works (APIM is optional).
+- **Basher:** No changes needed — APIM proxies transparently to the same Express API.
+- **Rusty:** APIM now demonstrable as the API gateway layer in the architecture. Shows rate limiting, CORS, and centralized API management.
+
+**Demo Notes:**
+- APIM Consumption tier has cold start (~5-10s on first call after idle) — warm it up before demos
+- Rate limit of 100/min is generous for demos but shows the capability in APIM portal
+- Subscription key is required — demonstrates API key management
+
+### Decision: Debug SQL Explorer Endpoint
+
+- **ID:** `debug-sql-explorer-001`
+- **Author:** Basher
+- **Date:** 2026-05-13
+- **Status:** Implemented
+- **Scope:** Backend API (Demo Feature)
+
+**Decision:** Added a `POST /api/debug/explore` endpoint that executes pre-defined (allowlisted) SQL queries through the standard auth + tenant context middleware, demonstrating Row-Level Security in action.
+
+**Key Design Choices:**
+
+1. **Query allowlist, not arbitrary SQL.** The endpoint accepts a `queryKey` string and looks it up in a hardcoded catalog of 5 named queries. Unknown keys are rejected with a 400. This eliminates SQL injection risk entirely.
+
+2. **Same middleware chain as production routes.** The debug route is registered with `auth` + `tenantContext` middleware — the exact same flow as `/api/requests` and `/api/integration`. This is the demo's core point: RLS filtering is not special-cased.
+
+3. **SQL text included in response.** Each response contains the raw SQL that was executed, so the frontend can display it alongside the filtered results — making the RLS behavior visible to the audience.
+
+4. **Human-readable `rlsNote`.** Each query has a templated explanation string that resolves the tenant name at runtime (e.g., "...only show Mercy General Hospital's data").
+
+5. **`cross_tenant_proof` query.** This is the "wow" query — it JOINs requests to tenants and groups by tenant name, seemingly asking for cross-tenant aggregates. RLS ensures only the current tenant's row appears.
+
+**Impact:**
+- **Linus:** New API endpoint available for a "Behind the Scenes" frontend panel. POST `{ "queryKey": "my_requests" }` to `/api/debug/explore` with auth headers.
+- **Rusty:** Include in demo script — switch personas and re-run the same query to show different results.
+- **Livingston:** No infrastructure changes needed; endpoint uses existing DB pool.
+
+**Security Note:** ⚠️ DEMO ONLY. In production, this endpoint should be removed or gated behind an admin role.
+
+### Decision: Explorer UI — API Contract with Backend
+
+- **ID:** `explorer-ui-001`
+- **Author:** Linus
+- **Date:** 2026-05-12
+- **Status:** Implemented
+- **Scope:** Frontend ↔ Backend API Contract
+
+**Decision:** Added a "Behind the Scenes" (`#explorer`) view to the frontend that demonstrates Row-Level Security visually. The frontend calls a new API endpoint that Basher implemented.
+
+**API Contract Implemented:**
+
+**Endpoint:** `POST /api/debug/explore`
+
+**Request body:**
+```json
+{ "queryKey": "my_requests" | "all_users" | "request_count" | "tenant_info" | "cross_tenant" }
+```
+
+**Expected response:**
+```json
+{
+  "sql": "SELECT ... FROM requests WHERE ...",
+  "rows": [ { "id": "...", "subject": "...", ... } ],
+  "rlsNote": "RLS filtered this query to only show Mercy General's 4 requests."
+}
+```
+
+- `sql` — The actual SQL that was executed (for display in a code block)
+- `rows` — Array of result objects (column names as keys)
+- `rlsNote` — Human-readable explanation of what RLS did
+
+**Frontend Files Changed:**
+- `src/frontend/js/views/explorer.js` (NEW)
+- `src/frontend/js/app.js` (route + globals)
+- `src/frontend/js/api.js` (`runExplorerQuery` method)
+- `src/frontend/css/styles.css` (explorer styles)
+- `src/frontend/public/index.html` (nav tab + script tag)
+- All synced to `src/api/public/`
+
+**Impact:**
+- **Basher:** Implemented `POST /api/debug/explore` endpoint returning the shape above
+- **Livingston:** No infra changes needed — uses existing App Service
+
+### Governance
 
 - All meaningful changes require team consensus
 - Document architectural decisions here
