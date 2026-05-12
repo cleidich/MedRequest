@@ -16,3 +16,6 @@ local.settings.json
 .squad/sessions/
 # Squad: SubSquad activation file (local to this machine)
 .squad-workstream
+app-logs.zip
+infra/main.json
+.azure/
