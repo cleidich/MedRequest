@@ -52,7 +52,7 @@
 - **Key insight:** Auth.set() already accepted { tenantId, userId, role } — no changes needed to auth.js
 - **Cross-team update (from Basher):** Harbor Medical Center (Tenant #3) now seeded with 3 users (Henry Park, Isabel Chen, Jack O'Brien) and 2 sample requests. All harbor-* personas are now functional and ready for demos.
 
-### 2025-07-15 — Frontend Handlers Completed for Demo Readiness
+### 2026-05-12 — Frontend Handlers Completed for Demo Readiness
 - **api.js:** Added `forwardToEmr(id)`, `forwardToBusinessOffice(id)`, and `notify(data)` methods for integration endpoints (`POST /api/integration/forward-emr`, `POST /api/integration/forward-business-office`, `POST /api/integration/notify`).
 - **concierge.js:** Replaced minimal "Start Working" / "Resolve" buttons with full workflow: Acknowledge → In Progress → Resolve → Forward to Case Manager. Replaced `alert()` with inline `.card-alert` toasts. Forward to CM sets `status: 'forwarded', forwarded_to: 'case_manager'`.
 - **casemanager.js:** Wired "Forward to Medical Record" to `Api.forwardToEmr()` and "Forward to Business Office" to `Api.forwardToBusinessOffice()` — these call the actual integration endpoints before updating status. Added Acknowledge and Close buttons. Replaced all `alert()` calls with inline card-level toasts.
@@ -60,4 +60,7 @@
 - **styles.css:** Added `.badge-acknowledged`, `.badge-closed`, `.btn-secondary`, `.card-alert` styles.
 - **Pattern:** All action handlers follow the same shape — `_handleAction(id, action, btnEl)` with `switch` on action, inline success/error alerts in the card, and list refresh after completion. Brief `setTimeout` delay on forward actions so user sees the success toast before the list refreshes.
 - **Key insight:** Case Manager forward actions call the integration API endpoint first, THEN update the request status — this ensures the integration system receives the data before we mark the request as forwarded.
+- **Cross-team coordination (from Basher):** Type mapping added to accept `comfort`/`service`/`staff` form types — frontend form can now submit successfully.
+- **Cross-team coordination (from Livingston):** Frontend redeployed to `app-medrequest-demo`; served from App Service root path; all workflows tested end-to-end.
+- **Status constraint note:** Flagged that `acknowledged` and `closed` statuses were missing from DB CHECK constraint. Coordinator fixed via Livingston's DB update. All 8 status values now supported.
 

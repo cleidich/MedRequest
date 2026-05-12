@@ -216,6 +216,73 @@ All frontend code lives under `src/frontend/`. No framework dependencies. CSS is
 - **Linus:** Frontend is served from App Service at root path `/` — no separate hosting needed
 - **All:** APIM has no API definitions yet — needs API import once contract is finalized
 
+### Decision: Backend API Gap Fixes for Demo Readiness
+- **ID:** `api-gaps-001`
+- **Author:** Basher
+- **Date:** 2026-05-12
+- **Status:** Implemented
+- **Scope:** Backend API, Database Seed Data
+
+**Decision:** Fixed four backend gaps blocking demo readiness:
+
+1. **Request type mapping:** Added a normalization layer in `requestService.js` that maps patient-form types (`comfort`, `service`, `staff`) to internal DB types (`feedback`, `concierge`, `case_manager`) before validation. Both naming conventions are accepted.
+
+2. **Integration endpoints wired:** Replaced stub integration service with real functions that validate request existence (with RLS), update status to `forwarded` in the database, and log actions. Added missing `POST /forward-business-office` route. Actual EMR/notification delivery remains mocked (POC scope).
+
+3. **Harbor Medical seed data:** Added 2 additional sample requests (feedback, concierge) bringing Harbor Medical to 4 total — matching other tenants' data density for balanced demos.
+
+4. **@read_only review confirmed:** Livingston's removal of `@read_only=1` from `sp_set_session_context` is correct and required. With connection pooling, `@read_only=1` prevents tenant context from being reset on reused connections, which would cause cross-tenant query failures. The per-query `setTenantContext()` call pattern provides sufficient isolation.
+
+**Key Design Choice:** Integration endpoints use the existing `forwarded` status value (already in the DB CHECK constraint) rather than adding new values like `forwarded_emr`/`forwarded_business_office`. This avoids a schema migration. The destination is captured in the response payload and server logs.
+
+**Impact:**
+- **Linus:** Patient form can now submit with `comfort`/`service`/`staff` types — API will accept them
+- **Rusty:** Integration API contract is now functional for APIM import
+- **Livingston:** Harbor Medical seed data deployed; all 3 tenants balanced (4 requests each)
+
+### Decision: Frontend Handler Completion — Integration API Pattern
+- **ID:** `frontend-handlers-001`
+- **Author:** Linus
+- **Date:** 2026-05-12
+- **Status:** Implemented
+- **Scope:** Frontend, API Integration
+
+**Decision:** Case Manager forward actions now call the dedicated integration API endpoints (`POST /api/integration/forward-emr`, `POST /api/integration/forward-business-office`) before updating request status via `PATCH /api/requests/:id`. This is a two-step pattern: integration call first, status update second.
+
+**Rationale:** The integration endpoints are the "real" action — they notify external systems. The status update is bookkeeping. If the integration call fails, we don't mark the request as forwarded (fail-fast). If the status update fails after a successful integration call, the user sees an error and can retry.
+
+**Concierge "Forward to Case Manager"** uses only `PATCH /api/requests/:id` with `{ status: 'forwarded', forwarded_to: 'case_manager' }` — no integration endpoint needed since this is an internal handoff.
+
+**New Statuses Supported:** `acknowledged`, `closed` (in addition to existing `new`, `in_progress`, `resolved`, `forwarded`). All 8 status values now in DB CHECK constraint and frontend UI.
+
+**Implementation Details:**
+- Case manager workflow: Acknowledge → In Progress → Resolve → Forward (to EMR or Business Office)
+- Concierge workflow: Acknowledge → In Progress → Resolve → Forward to Case Manager
+- All `alert()` calls replaced with inline `.card-alert` toasts
+- API client methods: `forwardToEmr(id)`, `forwardToBusinessOffice(id)`, `notify(data)`
+
+**Impact:**
+- **Basher:** Type mapping allows form types; integration endpoints wired and working
+- **Livingston:** Status constraint updated in live DB; all workflows tested
+- **All:** Demo now walkable end-to-end across all 9 personas
+
+### Decision: Database Constraint Update for Demo Workflows
+- **ID:** `db-constraint-001`
+- **Author:** Coordinator (via Linus's flag)
+- **Date:** 2026-05-12
+- **Status:** Implemented
+- **Scope:** Database Schema
+
+**Decision:** Updated `CK_requests_status` CHECK constraint to include `acknowledged` and `closed` statuses, which were flagged by Linus's frontend implementation but missing from the constraint.
+
+**Previous Constraint:** `forwarded`, `new`, `in_progress`, `resolved`
+
+**Updated Constraint:** `forwarded`, `acknowledged`, `closed`, `new`, `in_progress`, `resolved` (8 total values)
+
+**Context:** Linus added `acknowledged` and `closed` buttons to concierge and case manager views, but these statuses were not yet in the DB constraint. Coordinator coordinated fix via Livingston's DB update.
+
+**Impact:** All frontend status updates now accepted by database; no constraint violations on demo workflows.
+
 ## Governance
 
 - All meaningful changes require team consensus

@@ -66,4 +66,6 @@
 - **Harbor Medical seed data:** Added 2 new sample requests (feedback + concierge) for Henry Park, bringing Harbor Medical from 2 to 4 requests — matching the density of Mercy General and St. Claire.
 - **@read_only review (completed):** Confirmed Livingston's removal of `@read_only` from `sp_set_session_context` is correct. With connection pooling, `@read_only=1` makes the session variable immutable for the connection's lifetime — meaning reused connections can't reset tenant context, causing cross-tenant data leaks. Without `@read_only`, each query call properly resets the tenant context. The per-query `setTenantContext()` pattern already provides adequate isolation. No further changes needed.
 - **Key pattern:** Integration service functions now take `(tenantId, requestId)` instead of a pre-fetched request object — keeps validation and RLS enforcement inside the service layer, not the route.
+- **Cross-team coordination (from Linus):** Linus flagged that frontend uses `acknowledged` and `closed` statuses not in DB CHECK constraint. Coordinator fixed constraint in live DB (via Livingston). Frontend type mapping now compatible with form submission.
+- **Deployment note (from Livingston):** All fixes redeployed to `app-medrequest-demo`; Harbor seed data verified in live environment.
 

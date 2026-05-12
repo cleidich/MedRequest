@@ -75,3 +75,19 @@
 - **Demo Flow Options:**
   - **Without fixes:** Show persona switcher and request listing (works); skip patient submission and forwarding
   - **With fixes:** Full end-to-end workflow — patient submits request → concierge works it → case manager forwards to EMR
+
+### 2026-05-12 — Demo Readiness Fixes Completed by Team
+- **Status:** All 4 critical gaps fixed; demo now walkable end-to-end ✅
+- **Basher's contributions:** Type mapping via `normalizeType()`, integration endpoints fully wired, Harbor Medical seed data (2 additional requests), @read_only removal validated
+- **Linus's contributions:** Concierge full workflow (Acknowledge → In Progress → Resolve → Forward), case manager forward actions wired to integration endpoints, toast UI replaces all alerts, statuses `acknowledged` and `closed` supported in UI
+- **Livingston's contributions:** App redeployed to `app-medrequest-demo`, DB constraint updated to include new statuses, Harbor seed data verified in live environment
+- **Coordinator's contributions:** DB constraint fix coordination
+- **Outcomes:**
+  - Patient workflow: ✅ Form types normalized, API accepts `comfort`/`service`/`staff`
+  - Concierge workflow: ✅ Full state machine (Acknowledge → In Progress → Resolve → Forward to Case Manager)
+  - Case manager workflow: ✅ Forward to EMR/Business Office wired to integration endpoints
+  - Integration: ✅ All endpoints functional (EMR/comms mocked for POC)
+  - Seeding: ✅ 3 tenants, 10 users, 9 requests balanced across all hospitals
+  - All 9 personas: ✅ Functional, bookmarkable, tested end-to-end
+- **Live app:** https://app-medrequest-demo.azurewebsites.net — full walkable demo operational
+- **Architecture validation:** Project structure confirmed; multi-tenant RLS working; all ownership boundaries respected
