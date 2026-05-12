@@ -42,3 +42,24 @@
 - **Cross-team note (from Basher):** Pool must use `@azure/identity` for managed identity tokens; SQL schema bootstrap via seed script runs migrations + seed
 - **Cross-team note (from Linus):** Frontend served from App Service static content path `/`; APIM optional for API gateway layer (traffic can bypass to App Service directly)
 
+### 2025-01-14 — Testing & Deployment Documentation
+- **Created comprehensive deployment guide:** `docs/TESTING.md` — complete manual deployment instructions for demo environment
+- **Target environment specs:** Resource group `rg-medrequest-demo`, region `centralus`, environment name `demo`
+- **Deployment parameter reference:** Documented all required Bicep parameters from `main.bicep` and `main.bicepparam`
+- **Step-by-step deployment workflow:** Resource group creation → Bicep deployment → DB migrations → seed data → API deploy → frontend deploy → Functions deploy → verification
+- **Key deployment command:** `az deployment group create --resource-group rg-medrequest-demo --template-file infra/main.bicep --parameters infra/main.bicepparam --parameters environment=demo location=centralus apimPublisherEmail=<email> sqlAadAdminObjectId=<objectId>`
+- **Verification procedures:** Health checks (`/api/health`, `/api/ready`), multi-tenant RLS testing via curl with `X-Tenant-Id` headers, App Insights telemetry validation
+- **Troubleshooting coverage:** Common deployment failures, SQL AAD admin issues, VNet connectivity debugging, App Service log access, APIM endpoint testing
+- **Cost breakdown documented:** ~$170-180/month total (App Gateway $146, App Service $13, SQL $5, others <$10)
+- **Cleanup procedures:** Full resource group deletion command, selective resource shutdown for cost savings
+- **POC limitations flagged:** Header-based auth demo-only, no automated migrations in CI/CD, APIM cold start, App Gateway provisioning time, no custom domain/HTTPS
+- **CI/CD appendix:** OIDC federated credential setup for GitHub Actions, required secrets documentation
+- **Key files referenced:** `infra/main.bicep` (parameters), `db/migrations/001-initial-schema.sql` (schema), `db/seed/demo-data.sql` (personas), `.github/workflows/deploy.yml` (CI/CD pattern)
+
+### 2026-05-12 — Testing Validation & Demo Deployment Guide
+- **Session context:** Coordinator validated all app code (npm install, syntax checks, Bicep lint) — all clean
+- **Work completed:** Created comprehensive deployment guide `docs/TESTING.md` for rg-medrequest-demo environment in Central US
+- **Documented deployment:** Full step-by-step procedure with Bicep parameters, DB migrations, app deployment, verification, and troubleshooting
+- **Validation cross-reference:** All procedures aligned with actual infrastructure code and deployment scripts
+- **Outcome:** Demo environment now has complete deployment documentation ready for stakeholder execution
+
