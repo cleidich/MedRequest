@@ -1,0 +1,6 @@
+{
+  "name": "medrequest-functions",
+  "version": "1.0.0",
+  "description": "MedRequest Azure Functions — outbound integration scaffolds",
+  "dependencies": {}
+}
