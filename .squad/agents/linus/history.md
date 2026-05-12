@@ -10,4 +10,11 @@
 
 ## Learnings
 
-(No learnings yet)
+### 2025-07-14 — Project Structure Context
+- **Monorepo layout:** `src/frontend/`, `src/api/`, `src/functions/`, `infra/`, `db/`
+- **Frontend ownership:** Vanilla JS SPA (no heavy framework), mobile-first CSS, role-based views
+- **Tech stack:** JavaScript, responsive design for phone/tablet, header-based auth
+- **Integration:** API via Azure APIM, no OAuth/MSAL for POC
+- **Key context:** Project decision `project-structure-001` documented in `.squad/decisions.md`
+- **Reference:** See `docs/PROJECT-STRUCTURE.md` for full directory tree and ownership boundaries
+
