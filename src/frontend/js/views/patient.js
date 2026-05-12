@@ -114,7 +114,10 @@ const PatientView = (() => {
   }
 
   function _statusLabel(status) {
-    const labels = { new: 'New', in_progress: 'In Progress', resolved: 'Resolved', forwarded: 'Forwarded' };
+    const labels = {
+      new: 'New', acknowledged: 'Acknowledged', in_progress: 'In Progress',
+      resolved: 'Resolved', forwarded: 'Forwarded', closed: 'Closed'
+    };
     return labels[status] || status;
   }
 

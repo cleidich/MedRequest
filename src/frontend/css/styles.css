@@ -291,6 +291,27 @@ body {
   background: #d1ecf1;
   color: #0c5460;
 }
+.badge-acknowledged {
+  background: #fff3cd;
+  color: #856404;
+}
+.badge-closed {
+  background: #e2e3e5;
+  color: #383d41;
+}
+.btn-secondary {
+  background: var(--color-secondary, #6c757d);
+  color: #fff;
+}
+.btn-secondary:hover {
+  opacity: 0.85;
+}
+.card-alert {
+  margin-top: 0.5rem;
+}
+.card-alert:empty {
+  display: none;
+}
 
 /* --- Forms --- */
 .form-group {
