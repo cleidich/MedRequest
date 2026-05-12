@@ -11,7 +11,7 @@ const TYPE_MAP = {
 };
 
 const VALID_TYPES    = ['feedback', 'concierge', 'case_manager'];
-const VALID_STATUSES = ['new', 'in_progress', 'resolved', 'forwarded'];
+const VALID_STATUSES = ['new', 'acknowledged', 'in_progress', 'resolved', 'forwarded', 'closed'];
 
 /**
  * Normalize a request type — accepts both form-friendly and internal names.

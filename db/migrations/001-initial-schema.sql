@@ -42,7 +42,7 @@ CREATE TABLE requests (
     subject     NVARCHAR(500)    NOT NULL,
     body        NVARCHAR(MAX)    NULL,
     status      NVARCHAR(20)     NOT NULL DEFAULT 'new'
-        CONSTRAINT CK_requests_status CHECK (status IN ('new', 'in_progress', 'resolved', 'forwarded')),
+        CONSTRAINT CK_requests_status CHECK (status IN ('new', 'acknowledged', 'in_progress', 'resolved', 'forwarded', 'closed')),
     created_at  DATETIME2        NOT NULL DEFAULT SYSUTCDATETIME(),
     updated_at  DATETIME2        NOT NULL DEFAULT SYSUTCDATETIME(),
 
