@@ -68,13 +68,11 @@ const Api = (() => {
         if (config.apim && config.apim.enabled) {
           apimBaseUrl = config.apim.baseUrl.replace(/\/+$/, '');
           apimKey = config.apim.subscriptionKey || null;
-          useApim = true;
-          baseUrl = apimBaseUrl;
-          // Warm up APIM (Consumption tier cold-start) — fire and forget
-          fetch(apimBaseUrl + '/health', {
-            headers: { 'Ocp-Apim-Subscription-Key': apimKey || '' },
-            mode: 'cors',
-          }).catch(() => {});
+          // Default to direct mode — APIM is opt-in via toggle.
+          // Cross-origin APIM calls can fail in browsers due to CORS/cold-start.
+          // Use Api.setApimEnabled(true) or the UI toggle to route through APIM.
+          useApim = false;
+          baseUrl = DIRECT_BASE;
         } else {
           apimBaseUrl = null;
           apimKey = null;
