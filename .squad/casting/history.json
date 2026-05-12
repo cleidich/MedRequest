@@ -1,0 +1,21 @@
+{
+  "universe_usage_history": [
+    {
+      "universe": "Ocean's Eleven",
+      "assignment_id": "medrequest-init-2026-05-12",
+      "used_at": "2026-05-12T12:41:00Z"
+    }
+  ],
+  "assignment_cast_snapshots": {
+    "medrequest-init-2026-05-12": {
+      "universe": "Ocean's Eleven",
+      "agents": {
+        "lead": "Rusty",
+        "frontend-dev": "Linus",
+        "backend-dev": "Basher",
+        "infra-devops": "Livingston"
+      },
+      "created_at": "2026-05-12T12:41:00Z"
+    }
+  }
+}
