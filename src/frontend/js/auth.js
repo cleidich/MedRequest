@@ -10,8 +10,8 @@ const Auth = (() => {
   const STORAGE_KEY = 'medrequest_auth';
 
   const DEFAULTS = {
-    tenantId: 'tenant-001',
-    userId: 'patient-001',
+    tenantId: '11111111-1111-1111-1111-111111111111',
+    userId: '10000000-0000-0000-0000-000000000001',
     role: 'patient',
   };
 
@@ -30,9 +30,9 @@ const Auth = (() => {
 
   /** Mapping of roles to default demo user IDs. */
   const ROLE_USERS = {
-    patient: 'patient-001',
-    concierge: 'concierge-001',
-    casemanager: 'casemgr-001',
+    patient: '10000000-0000-0000-0000-000000000001',
+    concierge: '10000000-0000-0000-0000-000000000003',
+    casemanager: '10000000-0000-0000-0000-000000000004',
   };
 
   return {
