@@ -7,11 +7,11 @@
 
 const Api = (() => {
   const DIRECT_BASE = '/api';
+  const PROXY_BASE = '/api/proxy';
 
   let baseUrl = DIRECT_BASE;
   let useApim = false;
   let apimBaseUrl = null;
-  let apimKey = null;
 
   async function request(method, path, body, _retried) {
     const url = baseUrl + path;
@@ -19,9 +19,6 @@ const Api = (() => {
       'Content-Type': 'application/json',
       ...Auth.headers(),
     };
-    if (useApim && apimKey) {
-      headers['Ocp-Apim-Subscription-Key'] = apimKey;
-    }
     const options = {
       method,
       headers,
@@ -35,9 +32,8 @@ const Api = (() => {
     try {
       res = await fetch(url, options);
     } catch (err) {
-      // APIM Consumption tier cold-starts can cause the first request to fail.
-      // Retry once after a short delay before giving up.
-      if (!_retried && useApim) {
+      // Retry once on network failure (cold starts, transient errors)
+      if (!_retried) {
         await new Promise(r => setTimeout(r, 2000));
         return request(method, path, body, true);
       }
@@ -67,15 +63,11 @@ const Api = (() => {
 
         if (config.apim && config.apim.enabled) {
           apimBaseUrl = config.apim.baseUrl.replace(/\/+$/, '');
-          apimKey = config.apim.subscriptionKey || null;
           // Default to direct mode — APIM is opt-in via toggle.
-          // Cross-origin APIM calls can fail in browsers due to CORS/cold-start.
-          // Use Api.setApimEnabled(true) or the UI toggle to route through APIM.
           useApim = false;
           baseUrl = DIRECT_BASE;
         } else {
           apimBaseUrl = null;
-          apimKey = null;
           useApim = false;
           baseUrl = DIRECT_BASE;
         }
@@ -96,10 +88,10 @@ const Api = (() => {
       return baseUrl;
     },
 
-    /** Toggle between APIM gateway and direct App Service routing. */
+    /** Toggle between APIM gateway (via server proxy) and direct App Service routing. */
     setApimEnabled(enabled) {
       useApim = enabled && !!apimBaseUrl;
-      baseUrl = (useApim && apimBaseUrl) ? apimBaseUrl : DIRECT_BASE;
+      baseUrl = useApim ? PROXY_BASE : DIRECT_BASE;
     },
 
     isApimEnabled() {

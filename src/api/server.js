@@ -13,6 +13,7 @@ const requestRoutes  = require('./routes/requests');
 const integrationRoutes = require('./routes/integration');
 const debugRoutes       = require('./routes/debug');
 const configRoutes      = require('./routes/config');
+const proxyRoutes       = require('./routes/proxy');
 const { closePool }  = require('./db/pool');
 
 const app = express();
@@ -29,6 +30,11 @@ app.use(express.json());
 // ---------------------------------------------------------------------------
 app.use('/api', healthRoutes);
 app.use('/api/config', configRoutes);
+
+// ---------------------------------------------------------------------------
+// APIM proxy (handles auth forwarding internally, no middleware)
+// ---------------------------------------------------------------------------
+app.use('/api/proxy', proxyRoutes);
 
 // ---------------------------------------------------------------------------
 // Authenticated routes

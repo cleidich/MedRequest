@@ -99,3 +99,22 @@
 - **Conditional display:** Toggle only appears if `Api.isApimAvailable()` returns true — meaning `/api/config` returned valid APIM settings. If config fetch fails or APIM isn't configured, no toggle is rendered.
 - **No HTML changes:** Toggle is created dynamically via JS — no changes to `index.html`.
 - **Sync:** `api.js`, `app.js`, `styles.css` all synced to `src/api/public/`.
+
+### 2026-05-12 — APIM Proxy Refactor (Same-Origin Routing)
+- **Problem:** Direct APIM calls from browser were cross-origin, causing CORS issues and exposing subscription keys in client code.
+- **Solution:** Basher created server-side proxy at `/api/proxy/*`. Frontend now uses proxy as base URL when APIM mode is enabled — all requests stay same-origin.
+- **api.js changes:**
+  - Added `PROXY_BASE = '/api/proxy'` constant
+  - `setApimEnabled(true)` now sets `baseUrl = PROXY_BASE` (not external APIM URL)
+  - Removed `apimKey` variable entirely — subscription key only lives server-side now
+  - Removed `Ocp-Apim-Subscription-Key` header injection — proxy adds it
+  - Kept `apimBaseUrl` for `isApimAvailable()` check (still need to know if APIM was configured)
+  - Generalized retry logic — retries on any network failure, not just APIM cold starts
+- **app.js changes:**
+  - Warm-up ping changed from `Api.getBaseUrl() + '/health'` to hardcoded `/api/proxy/health`
+- **auth.js changes:**
+  - Added `ROLE_HEADER_MAP = { casemanager: 'case_manager' }` to map internal role to API-expected header value
+  - Backend expects `case_manager` (with underscore); frontend keeps `casemanager` for routing/views
+- **Sync:** All three files synced to `src/api/public/js/`
+- **Key benefit:** No CORS preflight overhead, no client-side secrets, simpler frontend logic. Proxy handles subscription key and APIM routing.
+- **Cross-team:** Basher owns `/api/proxy/*` endpoint implementation and APIM key injection.

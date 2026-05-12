@@ -104,3 +104,12 @@
 - **Config endpoint pattern:** Read process.env variables (resolved from Key Vault by App Service) and return to frontend as JSON. Public because subscription key is client-side, same exposure as any SPA calling a gateway.
 - **Graceful degradation:** Return `enabled: false` when APIM env vars not set (supports local dev without APIM configuration)
 - **Documented:** Decision `config-endpoint-001` in squad/decisions.md
+
+### 2026-05-13 — Role Normalization + APIM Server-Side Proxy
+- **Role normalization fix:** Auth middleware (`src/api/middleware/auth.js`) now accepts `casemanager` (no underscore) and normalizes to `case_manager` before validation. Added `ROLE_ALIASES` map — frontend can send either form, downstream code always sees canonical `case_manager`.
+- **APIM proxy route:** Created `src/api/routes/proxy.js` — server-side proxy to eliminate CORS issues. Route pattern: `ALL /api/proxy/*` strips `/proxy` prefix and forwards to `APIM_GATEWAY_URL` with same method, body, auth headers (`X-Tenant-Id`, `X-User-Id`, `X-User-Role`), plus `Ocp-Apim-Subscription-Key`.
+- **Proxy behavior:** Uses Node.js built-in `fetch` (Node 22 feature, no new deps). Returns 503 if APIM env vars not set, 502 if fetch fails, otherwise forwards APIM response status + body. Handles GET, POST, PATCH, DELETE with JSON body serialization.
+- **Registration:** Mounted at `/api/proxy` in `server.js` BEFORE auth middleware — no auth middleware on this route because it passes headers through to APIM which validates them.
+- **Error handling:** Graceful degradation when APIM not configured (local dev), clear error messages for gateway unreachable vs not configured.
+- **Pattern note:** Proxy handles its own auth forwarding — doesn't rely on Express auth middleware because it's a transparent passthrough. Auth validation happens at APIM.
+- **Cross-team:** Linus can now route frontend API calls to `/api/proxy/*` when APIM is enabled (from `/api/config` response), eliminating browser CORS preflight issues.

@@ -60,13 +60,16 @@ const Auth = (() => {
       return data;
     },
 
+    /** Mapping for role display values → API header values. */
     /** Return HTTP headers for API requests. */
     headers() {
       const data = _load();
+      const ROLE_HEADER_MAP = { casemanager: 'case_manager' };
+      const headerRole = ROLE_HEADER_MAP[data.role] || data.role;
       return {
         'X-Tenant-Id': data.tenantId,
         'X-User-Id': data.userId,
-        'X-User-Role': data.role,
+        'X-User-Role': headerRole,
       };
     },
   };

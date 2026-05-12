@@ -130,7 +130,7 @@ const App = (() => {
 
       // Warm up APIM with a health ping when toggled on
       if (enabled) {
-        try { await fetch(Api.getBaseUrl() + '/health'); } catch (_) { /* best-effort */ }
+        try { await fetch('/api/proxy/health'); } catch (_) { /* best-effort */ }
       }
     });
   }
