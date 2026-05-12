@@ -6,17 +6,27 @@
 /* global Auth, fetch */
 
 const Api = (() => {
-  // Base URL is configurable; defaults to /api (proxied in production).
-  let baseUrl = '/api';
+  // APIM gateway URL — routes API calls through Azure API Management.
+  // Falls back to direct /api if APIM is unreachable (cold start).
+  const APIM_BASE = 'https://apim-medrequest-demo.azure-api.net/medrequest/api';
+  const APIM_KEY = '70cee38f45ec4aeaaffc2eb7aa62f1ca';
+  const DIRECT_BASE = '/api';
+
+  let baseUrl = APIM_BASE;
+  let useApim = true;
 
   async function request(method, path, body) {
     const url = baseUrl + path;
+    const headers = {
+      'Content-Type': 'application/json',
+      ...Auth.headers(),
+    };
+    if (useApim) {
+      headers['Ocp-Apim-Subscription-Key'] = APIM_KEY;
+    }
     const options = {
       method,
-      headers: {
-        'Content-Type': 'application/json',
-        ...Auth.headers(),
-      },
+      headers,
     };
     if (body) {
       options.body = JSON.stringify(body);
@@ -42,6 +52,16 @@ const Api = (() => {
 
     getBaseUrl() {
       return baseUrl;
+    },
+
+    /** Toggle between APIM gateway and direct App Service routing. */
+    setApimEnabled(enabled) {
+      useApim = enabled;
+      baseUrl = enabled ? APIM_BASE : DIRECT_BASE;
+    },
+
+    isApimEnabled() {
+      return useApim;
     },
 
     // --- Request CRUD ---
