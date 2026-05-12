@@ -28,4 +28,6 @@
 - **Case Manager stubs:** "Forward to Record" and "Forward to Business Office" send PATCH with `forwarded_to` field.
 - **Key files:** `src/frontend/public/index.html`, `css/styles.css`, `js/app.js`, `js/api.js`, `js/auth.js`, `js/views/{patient,concierge,casemanager}.js`.
 - **Dev server:** `npm start` runs `http-server` on port 3000.
+- **Cross-team note (from Basher):** API endpoints confirm with frontend expectations: POST/GET/GET/:id/PATCH `/api/requests`, GET `/api/integration/requests`, POST `/api/integration/forward-emr`, POST `/api/integration/notify`
+- **Cross-team note (from Livingston):** Frontend served from App Service static content path `/` (SPA entry point is `index.html`); no additional server-side routing needed
 

@@ -20,3 +20,26 @@
 - **Key context:** Project decision `project-structure-001` documented in `.squad/decisions.md`
 - **Reference:** See `docs/PROJECT-STRUCTURE.md` for full directory tree and ownership boundaries
 
+### 2025-07-14 — Backend API & DB Schema Scaffold
+- **Schema:** `db/migrations/001-initial-schema.sql` — tenants, users, requests tables with RLS via `fn_tenant_filter` + `SESSION_CONTEXT`
+- **Seed data:** `db/seed/demo-data.sql` — 2 hospitals, 7 users, 5 sample requests (disables/re-enables RLS for seeding)
+- **Express API:** Full `routes → services → db` stack in `src/api/`
+  - `server.js` — Express entry with helmet, cors, JSON parsing, graceful shutdown
+  - `config/index.js` — env config with managed identity toggle (`DB_USE_MANAGED_IDENTITY=true`)
+  - `db/pool.js` — mssql connection pool, supports `azure-active-directory-default` auth type for managed identity
+  - `db/queries.js` — parameterized SQL; `setTenantContext()` called per-query for RLS
+  - `middleware/auth.js` — validates X-Tenant-Id (UUID), X-User-Id (UUID), X-User-Role (enum)
+  - `middleware/tenantContext.js` — ensures DB pool is reachable, sets req.tenantId
+  - `middleware/errorHandler.js` — centralized JSON error responses, detail in non-prod
+  - `routes/requests.js` — POST, GET list, GET by id, PATCH status
+  - `routes/integration.js` — pull API (GET /api/integration/requests?status=&since=), forward-emr stub, notify stub
+  - `routes/health.js` — /api/health (liveness), /api/ready (DB check)
+  - `services/requestService.js` — validation + business logic layer
+  - `services/integrationService.js` — stub functions for EMR, comms, business office
+- **Azure Function:** `src/functions/outbound-notify/` — HTTP-triggered stub, logs "would notify EMR"
+- **Key decisions:** UUID primary keys (NEWID()), CHECK constraints instead of ENUM type (Azure SQL), RLS policies on both users and requests tables
+- **Linus integration point:** Frontend should set `X-Tenant-Id`, `X-User-Id`, `X-User-Role` headers on all API calls
+- **Livingston integration point:** DB infra should run `db/migrations/001-initial-schema.sql` then `db/seed/demo-data.sql` via `infra/scripts/seed-sql.sh`
+- **Cross-team note (from Livingston):** SQL Server uses managed identity auth (AAD-only), app identity has SQL Server admin role; use `@azure/identity` library for token acquisition
+- **Cross-team note (from Linus):** Frontend API client (`src/frontend/js/api.js`) automatically injects auth headers; confirmed API endpoints match expectations
+

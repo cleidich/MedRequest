@@ -39,4 +39,6 @@
 - **Cost flags:** App Gateway ~$146/mo is biggest cost; APIM Consumption is pay-per-call; B1 over F1 needed for VNet integration
 - **Bicep validates clean** via `az bicep build`
 - **Seed script:** `infra/scripts/seed-sql.sh` for bootstrapping DB schema via sqlcmd with AAD auth
+- **Cross-team note (from Basher):** Pool must use `@azure/identity` for managed identity tokens; SQL schema bootstrap via seed script runs migrations + seed
+- **Cross-team note (from Linus):** Frontend served from App Service static content path `/`; APIM optional for API gateway layer (traffic can bypass to App Service directly)
 
