@@ -97,8 +97,11 @@ const App = (() => {
   }
 
   /** Initialize the app. */
-  function init() {
+  async function init() {
     _initMenu();
+
+    // Fetch runtime config (APIM vs direct mode) before any API calls
+    await Api.init();
 
     // Detect persona from URL before rendering
     _detectPersona();
@@ -114,4 +117,4 @@ const App = (() => {
 })();
 
 // Boot when DOM is ready
-document.addEventListener('DOMContentLoaded', App.init);
+document.addEventListener('DOMContentLoaded', () => App.init());

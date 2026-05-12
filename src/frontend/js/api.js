@@ -6,14 +6,12 @@
 /* global Auth, fetch */
 
 const Api = (() => {
-  // APIM gateway URL — routes API calls through Azure API Management.
-  // Falls back to direct /api if APIM is unreachable (cold start).
-  const APIM_BASE = 'https://apim-medrequest-demo.azure-api.net/medrequest/api';
-  const APIM_KEY = '70cee38f45ec4aeaaffc2eb7aa62f1ca';
   const DIRECT_BASE = '/api';
 
-  let baseUrl = APIM_BASE;
-  let useApim = true;
+  let baseUrl = DIRECT_BASE;
+  let useApim = false;
+  let apimBaseUrl = null;
+  let apimKey = null;
 
   async function request(method, path, body) {
     const url = baseUrl + path;
@@ -21,8 +19,8 @@ const Api = (() => {
       'Content-Type': 'application/json',
       ...Auth.headers(),
     };
-    if (useApim) {
-      headers['Ocp-Apim-Subscription-Key'] = APIM_KEY;
+    if (useApim && apimKey) {
+      headers['Ocp-Apim-Subscription-Key'] = apimKey;
     }
     const options = {
       method,
@@ -45,6 +43,35 @@ const Api = (() => {
   }
 
   return {
+    /**
+     * Fetch runtime configuration from the backend.
+     * Must be called (and awaited) before any other API calls.
+     */
+    async init() {
+      try {
+        const res = await fetch('/api/config');
+        if (!res.ok) throw new Error(`Config fetch failed (${res.status})`);
+        const config = await res.json();
+
+        if (config.apim && config.apim.enabled) {
+          apimBaseUrl = config.apim.baseUrl.replace(/\/+$/, '');
+          apimKey = config.apim.subscriptionKey || null;
+          useApim = true;
+          baseUrl = apimBaseUrl;
+        } else {
+          apimBaseUrl = null;
+          apimKey = null;
+          useApim = false;
+          baseUrl = DIRECT_BASE;
+        }
+      } catch (err) {
+        // If config endpoint is unavailable, fall back to direct mode
+        console.warn('Could not load /api/config — using direct API mode:', err.message);
+        useApim = false;
+        baseUrl = DIRECT_BASE;
+      }
+    },
+
     /** Override the default API base URL. */
     setBaseUrl(url) {
       baseUrl = url.replace(/\/+$/, '');
@@ -56,8 +83,8 @@ const Api = (() => {
 
     /** Toggle between APIM gateway and direct App Service routing. */
     setApimEnabled(enabled) {
-      useApim = enabled;
-      baseUrl = enabled ? APIM_BASE : DIRECT_BASE;
+      useApim = enabled && !!apimBaseUrl;
+      baseUrl = (useApim && apimBaseUrl) ? apimBaseUrl : DIRECT_BASE;
     },
 
     isApimEnabled() {

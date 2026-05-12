@@ -12,6 +12,7 @@ const healthRoutes   = require('./routes/health');
 const requestRoutes  = require('./routes/requests');
 const integrationRoutes = require('./routes/integration');
 const debugRoutes       = require('./routes/debug');
+const configRoutes      = require('./routes/config');
 const { closePool }  = require('./db/pool');
 
 const app = express();
@@ -27,6 +28,7 @@ app.use(express.json());
 // Health probes (no auth required)
 // ---------------------------------------------------------------------------
 app.use('/api', healthRoutes);
+app.use('/api/config', configRoutes);
 
 // ---------------------------------------------------------------------------
 // Authenticated routes
