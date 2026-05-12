@@ -50,9 +50,12 @@
 - **Pattern notes:** SQL string escaping for apostrophes (e.g., `Jack O''Brien`), UUID prefix convention (tenants: A/B/C, users: 1x/2x/3x, requests: C/D/E per tenant)
 - **Cross-team note (from Rusty):** Persona switcher design (`docs/DEMO-AUTH-DESIGN.md`) requires third tenant for complete 9-persona demo grid (3 tenants × 3 roles)
 
-### 2025-01-14 — Harbor Medical Center Now Supports Full Persona Switcher
-- **Linus integration:** Frontend persona switcher (`js/personas.js`, `js/views/picker.js`, `js/components/persona-badge.js`) now fully functional with all 9 personas across 3 tenants
-- **Demo ready:** Presenters can now use bookmarkable URLs (`/?persona=harbor-patient#patient`, etc.) to switch between Harbor Medical Center personas without DB seeding delays
-- **Cross-team note (from Linus):** Frontend query-param approach matches Rusty's design doc exactly; 9-persona registry complete with Harbor personas now seeded and functional
-- **Key files:** All persona IDs in `db/seed/demo-data.sql` match those in `src/frontend/js/personas.js` registry
+### 2026-05-12 — Full Azure Deployment Completed
+- **Status:** All resources deployed successfully to `rg-medrequest-demo` (Central US)
+- **App URL:** https://app-medrequest-demo.azurewebsites.net
+- **Bicep fixes:** Fixed 6 bugs — WAF SKU, WAF config migration, Key Vault purge protection, SQL principal type, env var naming, Node 22 runtime
+- **App fix:** Removed `@read_only` from `sp_set_session_context` in `src/api/db/queries.js` to fix cross-tenant queries with connection pooling
+- **Frontend integration:** Added `express.static` middleware; frontend served from App Service root path; index.html paths updated to root-relative
+- **Cross-team:** Livingston completed deployment; Basher should review the `@read_only` removal; Linus confirmed frontend integration points; Rusty noted APIM needs API definitions
+- **Next:** Basher to review session context isolation; Rusty to finalize API contract for APIM import; all demo personas operational (9 total across 3 hospitals)
 

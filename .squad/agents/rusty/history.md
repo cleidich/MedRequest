@@ -39,10 +39,12 @@
 - **Trade-offs**: Rejected path-based routing (conflicts with hash router), rejected hash-only (not composable), rejected localStorage-only (not bookmarkable)
 - **Ownership**: Linus=frontend implementation, Basher=seed data for Tenant #3, Rusty=design approval
 
-### 2026-05-12 — Demo Persona Switcher Completed
-- **Status**: Fully implemented and documented decision `demo-auth-001` in `.squad/decisions.md`
-- **Linus delivered**: Frontend persona switcher (`personas.js`, `picker.js`, `persona-badge.js`) with all 9 personas, picker landing page, mobile-responsive badge
-- **Basher delivered**: Harbor Medical Center seeding (Tenant #3) with 3 users and 2 sample requests; all persona IDs synced with frontend registry
-- **Team coordination**: Cross-team notes updated in both Linus and Basher history files; frontend and backend integration points confirmed
-- **Documentation**: Orchestration logs created for all three agents; session log documented; inbox decisions merged and archived
-- **Ready for demo**: Presenters can now use bookmarkable URLs like `/?persona=harbor-casemanager#casemanager` to switch personas across all 3 hospitals
+### 2026-05-12 — Demo Deployment Complete — App Live
+- **Status**: Full Azure deployment of MedRequest to `rg-medrequest-demo` (Central US) completed successfully
+- **App URL**: https://app-medrequest-demo.azurewebsites.net
+- **Livingston delivered:** Bicep fixes (WAF SKU, config migration, KV purge protection, SQL principal type, env vars, Node 22 runtime), frontend integration via express.static, deployment scripts
+- **Basher coordination:** All 9 demo personas (3 hospitals × 3 roles) seeded in Azure SQL and operational via Harbor Medical center addition from previous session
+- **Linus coordination:** Frontend query-param persona switcher fully integrated; being served from App Service root path; no separate static site needed
+- **Deployment notes:** All Azure resources operational (App Service, SQL, App Gateway WAF, Key Vault, App Insights, Log Analytics, Storage). APIM provisioned but no API definitions yet — waiting on Rusty's finalized contract
+- **⚠️ Review item:** Basher to review `@read_only` removal from `sp_set_session_context` — Livingston notes it was necessary for correct multi-tenant behavior with connection pooling but suggests considering alternatives
+- **Architecture validation:** Confirms project structure adopted in earlier decisions; cost baseline approved; all 9 personas bookmarkable and testable

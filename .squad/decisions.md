@@ -181,6 +181,41 @@ All frontend code lives under `src/frontend/`. No framework dependencies. CSS is
 
 **Impact:** Cost baseline is set; team can proceed with App Gateway deployment.
 
+### Decision: Demo Deployment Completed with Fixes
+- **ID:** `deploy-demo-001`
+- **Author:** Livingston
+- **Date:** 2026-05-12
+- **Status:** Implemented
+- **Scope:** Infrastructure, Deployment
+
+**Decision:** Deployed the full MedRequest demo environment to `rg-medrequest-demo` in Central US. Fixed 6 Bicep bugs and 1 application bug during deployment.
+
+**Key Changes:**
+
+*Bicep Fixes (Livingston's scope)*
+1. App Gateway SKU changed from `Standard_v2` to `WAF_v2`
+2. WAF config migrated from deprecated inline to separate WAF Policy resource
+3. Key Vault `enablePurgeProtection: false` removed (property cannot be set to false)
+4. SQL `principalType` parameterized (was hardcoded to `Application`)
+5. App Service env vars aligned with app config (`DB_SERVER` not `SQL_SERVER`)
+6. Node runtime updated to `NODE|22-lts` (20-lts retired)
+
+*Application Fix (cross-team — Basher to review)*
+- Removed `@read_only = 1` from `sp_set_session_context` in `src/api/db/queries.js`
+- **Reason:** With connection pooling, `@read_only = 1` prevents tenant context from being reset on reused connections, causing cross-tenant query failures
+- **Impact:** Less restrictive session context, but required for correct multi-tenant behavior with pooling
+
+*Deployment Config (Livingston's scope)*
+- Added `express.static` middleware in `server.js` to serve frontend from `public/` directory
+- Frontend files copied into API's `public/` directory for unified deployment
+- Index.html paths updated from `../css/` to `/css/` for root-relative serving
+
+**Impact:**
+
+- **Basher:** Review the `@read_only` removal in queries.js — consider alternative approaches for session context isolation
+- **Linus:** Frontend is served from App Service at root path `/` — no separate hosting needed
+- **All:** APIM has no API definitions yet — needs API import once contract is finalized
+
 ## Governance
 
 - All meaningful changes require team consensus
