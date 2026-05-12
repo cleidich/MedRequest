@@ -48,3 +48,30 @@
 - **Deployment notes:** All Azure resources operational (App Service, SQL, App Gateway WAF, Key Vault, App Insights, Log Analytics, Storage). APIM provisioned but no API definitions yet — waiting on Rusty's finalized contract
 - **⚠️ Review item:** Basher to review `@read_only` removal from `sp_set_session_context` — Livingston notes it was necessary for correct multi-tenant behavior with connection pooling but suggests considering alternatives
 - **Architecture validation:** Confirms project structure adopted in earlier decisions; cost baseline approved; all 9 personas bookmarkable and testable
+
+### 2026-05-13 — Demo Readiness Gap Analysis
+- **Goal:** Identify what's needed to make MedRequest a working, walkable demo
+- **Method:** Code review of all API routes, services, middleware, DB queries, frontend views, and integration
+- **Current State:** **50% functional** — core architecture and persona switcher work, but 3 critical business logic gaps prevent end-to-end workflows
+- **Critical Issues Found:**
+  1. **Request Type Mismatch** (BLOCKING patient workflow): Patient form sends `comfort`, `service`, `staff` but API only accepts `feedback`, `concierge`, `case_manager`. Frontend form validation fails at API submission.
+  2. **Concierge Forward Actions Missing** (BLOCKING concierge workflow): Concierge view renders "Start Working" and "Resolve" buttons but lacks "Forward" actions. No cross-role handoff UI wired.
+  3. **Case Manager Forward Actions Incomplete** (BLOCKING case manager workflow): Case manager view has button definitions for `forward-record` and `forward-bizoffice` but handler (_handleAction) is stubbed—no API integration endpoint called.
+- **Secondary Issues:**
+  1. Harbor Medical sample requests missing from seed data (empty demo lists for Harbor users)
+  2. Integration service endpoints exist but are mock stubs (acceptable for POC, intentional scaffolding)
+  3. Error handling and loading UX are minimal but functional
+- **Root Cause Analysis:**
+  - Type mismatch: Frontend and API contract diverged (API follows schema CHECK constraint, form uses patient-friendly labels)
+  - Action handling: Basher completed API scaffolding but Linus's frontend implementation incomplete (buttons exist, handlers missing)
+  - Seeding: Harbor Medical tenant created but no sample requests inserted
+- **API Assessment:** All CRUD endpoints real and database-backed; RLS with SESSION_CONTEXT working; auth middleware validated; 6 query functions fully implemented with parameterized inputs
+- **Frontend Assessment:** Auth, API client, personas, picker, all views render; persona detection works; problem is in view handler completeness and form field alignment
+- **Database Assessment:** Schema correct, RLS policies active, 3 tenants + 7 users seeded, but only 2 tenants have sample requests
+- **Recommended Priority Fix List:**
+  - **Linus (1–2 hours):** Fix patient form types, complete concierge/case manager forward action handlers
+  - **Basher (1–2 hours):** Align request types (decide: update API or form), wire forward endpoints, seed Harbor requests
+  - **Total effort to demo-ready: 3–4 hours**
+- **Demo Flow Options:**
+  - **Without fixes:** Show persona switcher and request listing (works); skip patient submission and forwarding
+  - **With fixes:** Full end-to-end workflow — patient submits request → concierge works it → case manager forwards to EMR
