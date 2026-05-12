@@ -1,0 +1,110 @@
+# MedRequest — Deploy to Dev
+# Deploys infrastructure (Bicep) and application code to the dev environment
+
+name: Deploy to Dev
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  id-token: write   # Required for OIDC federated credentials
+  contents: read
+
+env:
+  AZURE_RESOURCE_GROUP: rg-medrequest-dev
+  AZURE_LOCATION: eastus
+
+jobs:
+  deploy-infra:
+    name: Deploy Infrastructure
+    runs-on: ubuntu-latest
+    outputs:
+      webAppName: ${{ steps.deploy.outputs.webAppName }}
+      functionAppName: ${{ steps.deploy.outputs.functionAppName }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Create Resource Group
+        run: |
+          az group create \
+            --name ${{ env.AZURE_RESOURCE_GROUP }} \
+            --location ${{ env.AZURE_LOCATION }} \
+            --tags project=medrequest environment=dev
+
+      - name: Deploy Bicep
+        id: deploy
+        run: |
+          result=$(az deployment group create \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --template-file infra/main.bicep \
+            --parameters infra/main.bicepparam \
+            --parameters sqlAadAdminObjectId=${{ secrets.SQL_AAD_ADMIN_OBJECT_ID }} \
+            --query 'properties.outputs' -o json)
+
+          echo "webAppName=$(echo $result | jq -r '.webAppHostname.value' | cut -d. -f1)" >> "$GITHUB_OUTPUT"
+          echo "functionAppName=$(echo $result | jq -r '.functionAppHostname.value' | cut -d. -f1)" >> "$GITHUB_OUTPUT"
+
+  deploy-api:
+    name: Deploy API
+    needs: deploy-infra
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install API dependencies
+        working-directory: src/api
+        run: npm ci --production
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy to App Service
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ needs.deploy-infra.outputs.webAppName }}
+          package: src/api
+
+  deploy-functions:
+    name: Deploy Functions
+    needs: deploy-infra
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Functions dependencies
+        working-directory: src/functions
+        run: npm ci --production
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy to Function App
+        uses: azure/functions-action@v2
+        with:
+          app-name: ${{ needs.deploy-infra.outputs.functionAppName }}
+          package: src/functions
