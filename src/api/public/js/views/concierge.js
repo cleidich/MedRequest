@@ -52,7 +52,7 @@ const ConciergeView = (() => {
       }
 
       listEl.innerHTML = requests.map((r) => `
-        <article class="card" aria-label="Request: ${_esc(r.subject)}">
+        <article class="card" aria-label="Request: ${_esc(r.subject)}" data-request-id="${r.id}">
           <div class="card-header">
             <span class="card-title">${_esc(r.subject)}</span>
             <span class="badge badge-${r.status}">${_statusLabel(r.status)}</span>
@@ -62,27 +62,55 @@ const ConciergeView = (() => {
           </div>
           <div class="card-body">${_esc(r.body)}</div>
           <div class="card-actions">
-            ${r.status === 'new' ? `<button class="btn btn-sm btn-warning" data-action="in_progress" data-id="${r.id}">Start Working</button>` : ''}
+            ${r.status === 'new' ? `<button class="btn btn-sm btn-primary" data-action="acknowledge" data-id="${r.id}">Acknowledge</button>` : ''}
+            ${r.status === 'new' || r.status === 'acknowledged' ? `<button class="btn btn-sm btn-warning" data-action="in_progress" data-id="${r.id}">In Progress</button>` : ''}
             ${r.status === 'in_progress' ? `<button class="btn btn-sm btn-success" data-action="resolved" data-id="${r.id}">Resolve</button>` : ''}
+            ${r.status !== 'forwarded' && r.status !== 'closed' ? `<button class="btn btn-sm btn-info" data-action="forward_cm" data-id="${r.id}">Forward to Case Manager</button>` : ''}
           </div>
+          <div class="card-alert" role="alert" aria-live="polite"></div>
         </article>
       `).join('');
 
-      // Bind action buttons
       listEl.querySelectorAll('[data-action]').forEach((btn) => {
-        btn.addEventListener('click', () => _updateStatus(btn.dataset.id, btn.dataset.action));
+        btn.addEventListener('click', () => _handleAction(btn.dataset.id, btn.dataset.action, btn));
       });
     } catch (err) {
       listEl.innerHTML = `<div class="alert alert-error">Could not load requests: ${err.message}</div>`;
     }
   }
 
-  async function _updateStatus(id, newStatus) {
+  async function _handleAction(id, action, btnEl) {
+    const card = btnEl.closest('.card');
+    const alertEl = card ? card.querySelector('.card-alert') : null;
+    const clearAlert = () => { if (alertEl) alertEl.innerHTML = ''; };
+
     try {
-      await Api.updateRequest(id, { status: newStatus });
-      _loadRequests();
+      switch (action) {
+        case 'acknowledge':
+          await Api.updateRequest(id, { status: 'acknowledged' });
+          break;
+        case 'in_progress':
+          await Api.updateRequest(id, { status: 'in_progress' });
+          break;
+        case 'resolved':
+          await Api.updateRequest(id, { status: 'resolved' });
+          break;
+        case 'forward_cm':
+          await Api.updateRequest(id, { status: 'forwarded', forwarded_to: 'case_manager' });
+          if (alertEl) alertEl.innerHTML = '<div class="alert alert-success">Forwarded to Case Manager.</div>';
+          break;
+      }
+      // Small delay so user can see the success message on forward
+      if (action === 'forward_cm') {
+        setTimeout(() => _loadRequests(), 600);
+      } else {
+        _loadRequests();
+      }
     } catch (err) {
-      alert('Failed to update request: ' + err.message);
+      if (alertEl) {
+        alertEl.innerHTML = `<div class="alert alert-error">Failed: ${_esc(err.message)}</div>`;
+        setTimeout(clearAlert, 4000);
+      }
     }
   }
 
@@ -93,7 +121,10 @@ const ConciergeView = (() => {
   }
 
   function _statusLabel(status) {
-    const labels = { new: 'New', in_progress: 'In Progress', resolved: 'Resolved', forwarded: 'Forwarded' };
+    const labels = {
+      new: 'New', acknowledged: 'Acknowledged', in_progress: 'In Progress',
+      resolved: 'Resolved', forwarded: 'Forwarded', closed: 'Closed'
+    };
     return labels[status] || status;
   }
 

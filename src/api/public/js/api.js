@@ -66,5 +66,22 @@ const Api = (() => {
     updateRequest(id, data) {
       return request('PATCH', `/requests/${id}`, data);
     },
+
+    // --- Integration endpoints ---
+
+    /** Forward a request to the EMR system. */
+    forwardToEmr(requestId) {
+      return request('POST', '/integration/forward-emr', { request_id: requestId });
+    },
+
+    /** Forward a request to the business office. */
+    forwardToBusinessOffice(requestId) {
+      return request('POST', '/integration/forward-business-office', { request_id: requestId });
+    },
+
+    /** Send a notification. */
+    notify(data) {
+      return request('POST', '/integration/notify', data);
+    },
   };
 })();
