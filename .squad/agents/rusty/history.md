@@ -104,3 +104,18 @@
   - All 9 personas: ✅ Functional, bookmarkable, tested end-to-end
 - **Live app:** https://app-medrequest-demo.azurewebsites.net — full walkable demo operational
 - **Architecture validation:** Project structure confirmed; multi-tenant RLS working; all ownership boundaries respected
+
+### 2026-05-13 — TESTING.md Rewritten as Definitive Deployment Runbook
+- **Trigger:** Chris spent 70+ minutes debugging a deployment due to undocumented gotchas
+- **Scope:** Complete rewrite of `docs/TESTING.md` — restructured from a loose guide into a phased runbook (Phase 0–5) that a zero-context deployer can follow end-to-end
+- **Key learnings captured:**
+  1. **Soft-delete conflicts:** APIM and Key Vault soft-deletes cause cryptic naming errors on re-deploy. Added Phase 1 pre-flight purge checks (`az apim deletedservice list`, `az keyvault list-deleted`).
+  2. **APIM provisioning time:** Consumption tier takes 15–30 minutes — CLI appears hung. Documented explicitly so deployers don't abort.
+  3. **Post-infra ordering matters:** APIM key → Key Vault → SQL firewall → managed identity SQL grant → migrations → seed. Out-of-order causes cascading failures.
+  4. **`az webapp up` gotchas:** Resets startup command silently; Oryx remote `npm install` is extremely slow on fresh instances; can leave container crash-looping. Added mandatory post-deploy verification and recovery steps.
+  5. **Startup command sensitivity:** Must be `node server.js` (the actual entrypoint in `src/api/server.js`), not `npm start` or anything else. `az webapp up` may overwrite this.
+  6. **Frontend sync requirement:** `src/frontend/` must be copied to `src/api/public/` before every deploy — Express serves from `public/`.
+  7. **Key Vault reference resolution:** `APIM_SUBSCRIPTION_KEY` and `APIM_GATEWAY_URL` are Key Vault references in app settings — if the secret doesn't exist or the managed identity lacks `Key Vault Secrets User`, the app shows `KeyVaultReferenceNotResolved`.
+- **Document structure:** Prerequisites → Pre-deploy checks → Bicep deploy → Post-infra setup (ordered) → App deploy with gotchas → Verification checklist → Troubleshooting → Cleanup → CI/CD appendix
+- **Bicep parameter table:** Added complete reference with all 8 parameters, defaults, and notes
+- **File:** `docs/TESTING.md` — now ~450 lines, fully self-contained

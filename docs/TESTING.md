@@ -1,96 +1,96 @@
-# MedRequest — Testing & Deployment Guide
+# MedRequest — Deployment Runbook
 
-## Overview
-
-This document provides comprehensive instructions for deploying the MedRequest POC to Azure for testing and demonstration purposes. It includes step-by-step deployment commands, verification procedures, and troubleshooting guidance.
-
-**Target audience:** Development team, QA engineers, stakeholders performing demo deployments
-
-**Scope:** Manual deployment to a test/demo Azure environment
-
----
+> **This is the definitive deployment guide.** Someone with zero context should be able to deploy
+> MedRequest from scratch using only this document.
 
 ## Target Environment
 
 | Parameter | Value | Notes |
 |-----------|-------|-------|
-| **Resource Group** | `rg-medrequest-demo` | Demo environment resource group |
-| **Region** | `centralus` (Central US) | Primary Azure region |
-| **Subscription** | `<YOUR_SUBSCRIPTION_ID>` | ⚠️ **Replace with actual subscription ID** |
-| **Environment Name** | `demo` | Used for resource naming |
-| **Naming Pattern** | `{resource}-medrequest-demo` | e.g., `app-medrequest-demo` |
+| **Resource Group** | `rg-medrequest-demo` | Demo environment |
+| **Region** | `centralus` | Central US |
+| **Environment Name** | `demo` | Used in resource naming |
+| **Naming Pattern** | `{type}-medrequest-demo` | e.g., `app-medrequest-demo`, `kv-medrequest-demo` |
+| **App URL** | `https://app-medrequest-demo.azurewebsites.net` | After deployment |
 
 ---
 
-## Prerequisites Checklist
-
-Before deploying, ensure you have the following tools and permissions:
+## Phase 0 — Prerequisites
 
 ### Required Tools
 
-- [ ] **Azure CLI** (version 2.50+)
-  ```bash
-  az version
-  az login
-  ```
-
-- [ ] **Bicep CLI** (bundled with Azure CLI)
-  ```bash
-  az bicep version
-  # Should be 0.20.0 or higher
-  ```
-
-- [ ] **Node.js** (version 18+ LTS)
-  ```bash
-  node --version
-  npm --version
-  ```
-
-- [ ] **SQL Server command-line tools** (sqlcmd)
-  ```bash
-  # Install via: https://learn.microsoft.com/sql/tools/sqlcmd-utility
-  sqlcmd -?
-  ```
-
-- [ ] **GitHub CLI** (optional, for CI/CD secrets setup)
-  ```bash
-  gh --version
-  gh auth login
-  ```
+| Tool | Minimum Version | Check Command |
+|------|----------------|---------------|
+| Azure CLI | 2.50+ | `az version` |
+| Bicep CLI | 0.20+ (bundled) | `az bicep version` |
+| Node.js | 18+ LTS | `node --version` |
+| sqlcmd | Latest | `sqlcmd -?` ([Install guide](https://learn.microsoft.com/sql/tools/sqlcmd-utility)) |
+| jq | Any | `jq --version` |
+| curl | Any | `curl --version` |
+| GitHub CLI | (optional) | `gh --version` |
 
 ### Required Azure Permissions
 
-- [ ] **Contributor** role on the target subscription (to create/manage resources)
-- [ ] **User Access Administrator** or **Owner** (to assign RBAC roles to managed identity)
-- [ ] Ability to create **Microsoft Entra ID** (Azure AD) service principals (for CI/CD OIDC)
+- **Contributor** on the target subscription (create/manage resources)
+- **User Access Administrator** or **Owner** (assign RBAC roles to managed identity)
+- Ability to create **Microsoft Entra ID** service principals (for CI/CD OIDC)
 
-### Required Configuration Values
+### Authenticate & Verify Identity
 
-Before deploying, gather these values:
+```bash
+az login
+az account set --subscription <YOUR_SUBSCRIPTION_ID>
+az account show --query '{name:name, id:id, user:user.name}' -o table
+```
 
-- [ ] **Azure Subscription ID**: `az account show --query id -o tsv`
-- [ ] **Azure Tenant ID**: `az account show --query tenantId -o tsv`
-- [ ] **Your User Object ID** (for SQL AAD admin): `az ad signed-in-user show --query id -o tsv`
-- [ ] **APIM Publisher Email**: Your email address for API Management notifications
+### Gather Required Values
+
+```bash
+SUBSCRIPTION_ID=$(az account show --query id -o tsv)
+TENANT_ID=$(az account show --query tenantId -o tsv)
+YOUR_AAD_OBJECT_ID=$(az ad signed-in-user show --query id -o tsv)
+
+echo "Subscription: $SUBSCRIPTION_ID"
+echo "Tenant:       $TENANT_ID"
+echo "Your AAD ID:  $YOUR_AAD_OBJECT_ID"
+```
+
+You will also need your **email address** for the `apimPublisherEmail` parameter.
 
 ---
 
-## Deployment Steps
+## Phase 1 — Pre-Deployment Checks
 
-### Step 1: Authenticate to Azure
+> ⚠️ **Do not skip this.** Azure soft-deletes certain resources. If a previous deployment was
+> torn down, leftover soft-deleted resources will cause naming conflicts and cryptic errors.
+
+### 1a. Check for Soft-Deleted APIM Instances
 
 ```bash
-# Login to Azure (opens browser for authentication)
-az login
-
-# Set the correct subscription (if you have multiple)
-az account set --subscription <YOUR_SUBSCRIPTION_ID>
-
-# Verify you're in the right subscription
-az account show --query '{name:name, id:id}' -o table
+az apim deletedservice list -o table
 ```
 
-### Step 2: Create Resource Group
+If you see `apim-medrequest-demo` in the output, purge it:
+
+```bash
+az apim deletedservice purge \
+  --service-name apim-medrequest-demo \
+  --location centralus
+```
+
+### 1b. Check for Soft-Deleted Key Vaults
+
+```bash
+az keyvault list-deleted -o table
+```
+
+If you see `kv-medrequest-demo` in the output, purge it:
+
+```bash
+az keyvault purge --name kv-medrequest-demo
+```
+
+### 1c. Create Resource Group (if it doesn't exist)
 
 ```bash
 az group create \
@@ -99,413 +99,448 @@ az group create \
   --tags project=medrequest environment=demo managedBy=bicep
 ```
 
-### Step 3: Deploy Infrastructure (Bicep)
+---
 
-This step provisions all Azure resources: App Service, Azure SQL, Key Vault, App Gateway, APIM, Functions, Storage, VNet, Monitoring.
+## Phase 2 — Infrastructure Deployment (Bicep)
 
-**⚠️ Important:** Replace `<YOUR_EMAIL>` and `<YOUR_AAD_OBJECT_ID>` with actual values.
+This provisions ALL Azure resources: App Service, Azure SQL, Key Vault, APIM, App Gateway (WAF),
+Functions, Storage, VNet, Monitoring (App Insights + Log Analytics), and a user-assigned managed
+identity.
+
+### Complete Deployment Command
 
 ```bash
-# Get your Azure AD object ID for SQL admin
 YOUR_AAD_OBJECT_ID=$(az ad signed-in-user show --query id -o tsv)
 
-# Deploy infrastructure
 az deployment group create \
   --resource-group rg-medrequest-demo \
   --template-file infra/main.bicep \
   --parameters infra/main.bicepparam \
-  --parameters environment=demo \
-  --parameters location=centralus \
-  --parameters apimPublisherEmail=<YOUR_EMAIL> \
+  --parameters environment=demo location=centralus \
+  --parameters apimPublisherEmail=<your-email> \
   --parameters sqlAadAdminObjectId=$YOUR_AAD_OBJECT_ID \
-  --parameters appServicePlanSku=B1 \
-  --parameters wafMode=Detection \
-  --query 'properties.outputs' -o json
+  --parameters appServicePlanSku=B1 wafMode=Detection
 ```
 
-**Expected duration:** 8-12 minutes (App Gateway takes the longest)
+### Bicep Parameter Reference
 
-**Capture outputs:** Save the output JSON — it contains the deployed resource names and endpoints.
+| Parameter | Required | Default | Notes |
+|-----------|----------|---------|-------|
+| `location` | No | `resourceGroup().location` | Use `centralus` |
+| `environment` | No | `dev` | Use `demo` |
+| `projectName` | No | `medrequest` | Base name for all resources |
+| `apimPublisherEmail` | **Yes** | — | Your email for APIM notifications |
+| `sqlAadAdminObjectId` | No | Managed identity | Your AAD object ID for SQL admin |
+| `apimSubscriptionKey` | No | `''` | Set post-deploy (see Phase 3a) |
+| `wafMode` | No | `Detection` | `Detection` or `Prevention` |
+| `appServicePlanSku` | No | `B1` | `B1` minimum for VNet integration |
+| `tags` | No | Auto-generated | `project`, `environment`, `managedBy` |
+
+### ⏱ Timing Expectations
+
+| Resource | Provisioning Time |
+|----------|-------------------|
+| APIM (Consumption tier) | **15–30 minutes** |
+| App Gateway (WAF Standard_v2) | **5–15 minutes** |
+| Everything else | 2–5 minutes |
+
+> The deployment CLI will appear to hang while APIM and App Gateway provision. This is normal.
+> Total wall-clock time: **20–40 minutes** for a fresh deployment.
+
+### Capture Deployment Outputs
 
 ```bash
-# Extract key outputs for later use
 DEPLOYMENT_OUTPUT=$(az deployment group show \
   --resource-group rg-medrequest-demo \
   --name main \
   --query 'properties.outputs' -o json)
 
 WEB_APP_HOSTNAME=$(echo $DEPLOYMENT_OUTPUT | jq -r '.webAppHostname.value')
-FUNCTION_APP_HOSTNAME=$(echo $DEPLOYMENT_OUTPUT | jq -r '.functionAppHostname.value')
 SQL_SERVER_FQDN=$(echo $DEPLOYMENT_OUTPUT | jq -r '.sqlServerFqdn.value')
-KEY_VAULT_URI=$(echo $DEPLOYMENT_OUTPUT | jq -r '.keyVaultUri.value')
 APIM_GATEWAY_URL=$(echo $DEPLOYMENT_OUTPUT | jq -r '.apimGatewayUrl.value')
 
-echo "Web App: $WEB_APP_HOSTNAME"
+echo "Web App:    https://$WEB_APP_HOSTNAME"
 echo "SQL Server: $SQL_SERVER_FQDN"
-echo "Key Vault: $KEY_VAULT_URI"
+echo "APIM:       $APIM_GATEWAY_URL"
 ```
 
-### Step 4: Run Database Migrations
+---
 
-Apply the initial schema to the Azure SQL database using AAD authentication.
+## Phase 3 — Post-Infrastructure Setup
 
-**⚠️ Note:** Ensure you have SQL admin rights (granted via `sqlAadAdminObjectId` parameter).
+These steps MUST be done **in order** after Bicep completes.
+
+### 3a. Store APIM Subscription Key in Key Vault
+
+The app reads the APIM subscription key from Key Vault via a Key Vault reference
+(`@Microsoft.KeyVault(...)` in app settings). The secret must exist or the app will fail to start.
 
 ```bash
-# Install Azure AD authentication for sqlcmd (if not already installed)
-# See: https://learn.microsoft.com/sql/connect/odbc/linux-mac/installing-the-microsoft-odbc-driver-for-sql-server
+APIM_KEY=$(az apim subscription list \
+  --resource-group rg-medrequest-demo \
+  --service-name apim-medrequest-demo \
+  --query "[?displayName=='Built-in all-access subscription'].primaryKey" -o tsv)
 
-# Get an Azure AD access token for SQL
+az keyvault secret set \
+  --vault-name kv-medrequest-demo \
+  --name APIM-SUBSCRIPTION-KEY \
+  --value "$APIM_KEY"
+```
+
+### 3b. Grant Your User Key Vault Access (if needed)
+
+If the `az keyvault secret set` command above fails with a 403, you need the **Key Vault Secrets
+Officer** role:
+
+```bash
+az role assignment create \
+  --assignee $(az ad signed-in-user show --query id -o tsv) \
+  --role "Key Vault Secrets Officer" \
+  --scope /subscriptions/$(az account show --query id -o tsv)/resourceGroups/rg-medrequest-demo/providers/Microsoft.KeyVault/vaults/kv-medrequest-demo
+```
+
+Then retry step 3a.
+
+### 3c. Add SQL Firewall Rule for Your IP
+
+```bash
+MY_IP=$(curl -s ifconfig.me)
+
+az sql server firewall-rule create \
+  --resource-group rg-medrequest-demo \
+  --server sql-medrequest-demo \
+  --name allow-deploy-ip \
+  --start-ip-address $MY_IP \
+  --end-ip-address $MY_IP
+```
+
+### 3d. Grant Managed Identity SQL Access
+
+The user-assigned managed identity (`id-medrequest-demo`) needs `db_datareader` and `db_datawriter`
+roles in the SQL database so the app can read/write data.
+
+```bash
 ACCESS_TOKEN=$(az account get-access-token --resource https://database.windows.net/ --query accessToken -o tsv)
 
-# Run schema migration
-sqlcmd -S $SQL_SERVER_FQDN \
+sqlcmd -S sql-medrequest-demo.database.windows.net \
+  -d medrequest-dev \
+  -G \
+  -P "$ACCESS_TOKEN" \
+  -Q "CREATE USER [id-medrequest-demo] FROM EXTERNAL PROVIDER; ALTER ROLE db_datareader ADD MEMBER [id-medrequest-demo]; ALTER ROLE db_datawriter ADD MEMBER [id-medrequest-demo];"
+```
+
+### 3e. Run Database Migrations
+
+```bash
+ACCESS_TOKEN=$(az account get-access-token --resource https://database.windows.net/ --query accessToken -o tsv)
+
+sqlcmd -S sql-medrequest-demo.database.windows.net \
   -d medrequest-dev \
   -G \
   -P "$ACCESS_TOKEN" \
   -i db/migrations/001-initial-schema.sql
 
-# Verify schema was created
-sqlcmd -S $SQL_SERVER_FQDN \
+# Verify schema
+sqlcmd -S sql-medrequest-demo.database.windows.net \
   -d medrequest-dev \
   -G \
   -P "$ACCESS_TOKEN" \
   -Q "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE='BASE TABLE'"
 ```
 
-**Expected output:** Should list `tenants`, `users`, `requests` tables.
+**Expected output:** `tenants`, `users`, `requests` tables.
 
-### Step 5: Seed Demo Data
-
-Load sample hospital tenants, users, and requests for testing.
+### 3f. Seed Demo Data
 
 ```bash
-# Seed demo data
-sqlcmd -S $SQL_SERVER_FQDN \
+sqlcmd -S sql-medrequest-demo.database.windows.net \
   -d medrequest-dev \
   -G \
   -P "$ACCESS_TOKEN" \
   -i db/seed/demo-data.sql
 
-# Verify data was seeded
-sqlcmd -S $SQL_SERVER_FQDN \
+# Verify
+sqlcmd -S sql-medrequest-demo.database.windows.net \
   -d medrequest-dev \
   -G \
   -P "$ACCESS_TOKEN" \
   -Q "SELECT name FROM tenants"
 ```
 
-**Expected output:** Should list 3 tenants:
-- Mercy General Hospital
-- St. Claire Medical Center
-- Harbor Medical Center
+**Expected:** Mercy General Hospital, St. Claire Medical Center, Harbor Medical Center.
 
-### Step 6: Deploy API to App Service
+---
 
-Build and deploy the Node.js Express API.
+## Phase 4 — Application Deployment
+
+> ⚠️ **THIS IS THE MOST FAILURE-PRONE STEP.** Read this entire section before running anything.
+
+### 4a. Sync Frontend Files
+
+The Express server serves static files from `src/api/public/`. Any changes made in `src/frontend/`
+**MUST** be copied to `src/api/public/` before deploying:
 
 ```bash
-# Navigate to API directory
+# From the repo root
+cp -r src/frontend/* src/api/public/
+```
+
+> 🔴 **Every frontend file change** requires this copy. If you skip it, the live app will serve
+> stale frontend code.
+
+### 4b. Deploy with `az webapp up`
+
+```bash
 cd src/api
 
-# Install production dependencies
-npm ci --production
-
-# Deploy to App Service
-az webapp deploy \
-  --resource-group rg-medrequest-demo \
-  --name app-medrequest-demo \
-  --src-path . \
-  --type zip \
-  --async false
-
-# Alternative: use az webapp up (creates zip and deploys)
 az webapp up \
-  --resource-group rg-medrequest-demo \
   --name app-medrequest-demo \
-  --runtime "NODE:20-lts" \
-  --os-type Linux
-
-cd ../..
+  --resource-group rg-medrequest-demo \
+  --runtime "NODE:22-lts"
 ```
 
-**Expected duration:** 2-3 minutes
+### ⚠️ Known Issues with `az webapp up`
 
-### Step 7: Deploy Frontend (Static Files)
+**Issue 1: Slow first deploy (5–15+ minutes)**
 
-The frontend is served from the same App Service as the API (static content at `/`).
+On a fresh App Service instance, Oryx (the build system) runs `npm install` remotely when
+`SCM_DO_BUILD_DURING_DEPLOYMENT=true`. This is extremely slow compared to a local build. The CLI
+may appear stuck at *"Starting the site..."* — wait at least 10 minutes before considering it stuck.
+
+**Issue 2: Startup command gets reset**
+
+`az webapp up` can overwrite the App Service startup command. The app entrypoint is `server.js`
+(not `index.js`, not `npm start`). If the startup command is wrong, the container will crash-loop.
+
+After every deploy, verify and fix:
 
 ```bash
-# Copy frontend files to App Service wwwroot
-az webapp deploy \
-  --resource-group rg-medrequest-demo \
+# Check current startup command
+az webapp config show \
   --name app-medrequest-demo \
-  --src-path src/frontend \
-  --type static \
-  --target-path /home/site/wwwroot/public
+  --resource-group rg-medrequest-demo \
+  --query appCommandLine -o tsv
 
-# Or use FTP/FTPS to upload frontend files to /home/site/wwwroot/public
-# (App Service configuration in Bicep maps / to /public)
+# If it is NOT "node server.js", fix it:
+az webapp config set \
+  --name app-medrequest-demo \
+  --resource-group rg-medrequest-demo \
+  --startup-file "node server.js"
 ```
 
-**Note:** The App Service Bicep module configures the default static content path to serve the frontend from `/public`.
+**Issue 3: App stuck / crash-looping after deploy**
 
-### Step 8: Deploy Azure Functions
+If `az webapp up` hangs at *"Starting the site..."* for more than 5 minutes, or the app returns
+502/504 after deploy, the container is likely crash-looping.
 
-Deploy the outbound integration Functions (currently scaffolded, no active code yet).
+**Recovery:**
 
 ```bash
-# Navigate to Functions directory
+az webapp stop  --name app-medrequest-demo --resource-group rg-medrequest-demo
+az webapp start --name app-medrequest-demo --resource-group rg-medrequest-demo
+```
+
+If it's still broken after restart, check logs (see Troubleshooting below), then verify:
+1. Startup command is `node server.js`
+2. Key Vault references are resolving (check app settings in Azure Portal)
+3. SQL firewall allows the App Service subnet
+
+### 4c. Restart After Deploy
+
+It's good practice to restart after the first deploy to ensure clean state:
+
+```bash
+az webapp restart \
+  --name app-medrequest-demo \
+  --resource-group rg-medrequest-demo
+```
+
+### 4d. Deploy Azure Functions (Optional)
+
+The Functions app is scaffolded but not required for the core demo flow.
+
+```bash
 cd src/functions
-
-# Install production dependencies
 npm ci --production
-
-# Deploy to Function App
 func azure functionapp publish func-medrequest-demo
-
-# Alternative: use Azure CLI
-az functionapp deployment source config-zip \
-  --resource-group rg-medrequest-demo \
-  --name func-medrequest-demo \
-  --src functions.zip
-
 cd ../..
 ```
 
-**Expected duration:** 1-2 minutes
+---
 
-### Step 9: Verify Deployment
+## Phase 5 — Verification Checklist
 
-Run health checks and smoke tests to confirm everything is working.
+Run these checks **in order** after deploying. Every check must pass before the deployment is
+considered successful.
 
-#### 9.1 Check App Service Health
+### 5a. Health Check
 
 ```bash
-# Health check (liveness)
-curl https://$WEB_APP_HOSTNAME/api/health
-
-# Expected output: {"status":"ok"}
+curl -s https://app-medrequest-demo.azurewebsites.net/api/health | jq .
+# Expected: {"status":"ok"}
 ```
 
-#### 9.2 Check Database Connectivity
+### 5b. Config Endpoint (Verify APIM Integration)
 
 ```bash
-# Readiness check (tests DB connection)
-curl https://$WEB_APP_HOSTNAME/api/ready
-
-# Expected output: {"status":"ok","database":"connected"}
+curl -s https://app-medrequest-demo.azurewebsites.net/api/config | jq .
+# Expected: JSON with apimEnabled: true (Key Vault refs resolved)
 ```
 
-#### 9.3 Test API with Demo Personas
+If `apimEnabled` is `false` or the Key Vault values show as `KeyVaultReferenceNotResolved`, see
+Troubleshooting.
 
-Test the API using header-based authentication for each demo persona.
-
-**Persona 1: Alice Johnson (Patient at Mercy General)**
+### 5c. Direct API — Requests Endpoint
 
 ```bash
-curl -X GET https://$WEB_APP_HOSTNAME/api/requests \
+# Patient at Mercy General
+curl -s https://app-medrequest-demo.azurewebsites.net/api/requests \
   -H "X-Tenant-Id: A0000000-0000-0000-0000-000000000001" \
   -H "X-User-Id: 10000000-0000-0000-0000-000000000001" \
-  -H "X-User-Role: patient"
+  -H "X-User-Role: patient" | jq .
 
-# Expected: Returns requests for Alice (tenant A, user 10000...)
-```
-
-**Persona 2: Frank Lee (Concierge at St. Claire)**
-
-```bash
-curl -X GET https://$WEB_APP_HOSTNAME/api/requests \
+# Concierge at St. Claire
+curl -s https://app-medrequest-demo.azurewebsites.net/api/requests \
   -H "X-Tenant-Id: B0000000-0000-0000-0000-000000000002" \
   -H "X-User-Id: 20000000-0000-0000-0000-000000000002" \
-  -H "X-User-Role: concierge"
+  -H "X-User-Role: concierge" | jq .
 
-# Expected: Returns requests for tenant B (different tenant from Alice)
-```
-
-**Persona 3: Jack O'Brien (Case Manager at Harbor Medical)**
-
-```bash
-curl -X GET https://$WEB_APP_HOSTNAME/api/requests \
+# Case Manager at Harbor Medical
+curl -s https://app-medrequest-demo.azurewebsites.net/api/requests \
   -H "X-Tenant-Id: C0000000-0000-0000-0000-000000000003" \
   -H "X-User-Id: 30000000-0000-0000-0000-000000000003" \
-  -H "X-User-Role: case_manager"
-
-# Expected: Returns requests for tenant C
+  -H "X-User-Role: case_manager" | jq .
 ```
 
-#### 9.4 Verify RLS Isolation
+Each persona should return **only their own tenant's data** (RLS isolation).
 
-Confirm that Tenant A cannot see Tenant B's data.
+### 5d. APIM Proxy Health
 
 ```bash
-# Request as Tenant A (Mercy General)
-curl -X GET https://$WEB_APP_HOSTNAME/api/requests \
-  -H "X-Tenant-Id: A0000000-0000-0000-0000-000000000001" \
-  -H "X-User-Id: 10000000-0000-0000-0000-000000000001" \
-  -H "X-User-Role: patient" \
-  | jq '.[] | .tenant_id' | sort | uniq
-
-# Expected: Only shows tenant A's GUID (A0000000-0000-0000-0000-000000000001)
-# Should NOT see tenant B or C data
+curl -s https://app-medrequest-demo.azurewebsites.net/api/proxy/health | jq .
+# Expected: proxied health response from APIM
 ```
 
-#### 9.5 Test Frontend
+### 5e. Behind-the-Scenes Debug Endpoint
 
 ```bash
-# Open frontend in browser
-open https://$WEB_APP_HOSTNAME
-
-# Or use curl to verify HTML is served
-curl https://$WEB_APP_HOSTNAME
-
-# Expected: Returns index.html with demo persona picker
+curl -s -X POST https://app-medrequest-demo.azurewebsites.net/api/proxy/debug/explore \
+  -H "Content-Type: application/json" \
+  -d '{}' | jq .
 ```
 
-#### 9.6 Check APIM Gateway (Optional)
+### 5f. Frontend
 
-```bash
-# Test APIM gateway endpoint (if configured with API definitions)
-curl https://$APIM_GATEWAY_URL/api/health
+Open in a browser: `https://app-medrequest-demo.azurewebsites.net`
 
-# Note: APIM is scaffolded but may not have API definitions yet
-```
-
----
-
-## Post-Deployment Verification
-
-### Application Insights Telemetry
-
-Verify that telemetry is flowing to Application Insights.
-
-```bash
-# Get App Insights name
-APP_INSIGHTS_NAME=$(az monitor app-insights component list \
-  --resource-group rg-medrequest-demo \
-  --query '[0].name' -o tsv)
-
-# Query recent requests
-az monitor app-insights query \
-  --app $APP_INSIGHTS_NAME \
-  --analytics-query "requests | where timestamp > ago(10m) | project timestamp, name, resultCode, duration | order by timestamp desc" \
-  --offset 10m
-
-# Expected: Shows recent HTTP requests to the API
-```
-
-### Log Analytics Workspace
-
-Check logs from all resources.
-
-```bash
-# Get Log Analytics workspace name
-LAW_NAME=$(az monitor log-analytics workspace list \
-  --resource-group rg-medrequest-demo \
-  --query '[0].name' -o tsv)
-
-# Query App Service logs
-az monitor log-analytics query \
-  --workspace $LAW_NAME \
-  --analytics-query "AppServiceConsoleLogs | where TimeGenerated > ago(10m) | project TimeGenerated, ResultDescription" \
-  --timespan P1D
-```
-
-### SQL Server Connectivity Test
-
-Verify managed identity authentication is working.
-
-```bash
-# Check if managed identity can access SQL
-az sql db show \
-  --resource-group rg-medrequest-demo \
-  --server sql-medrequest-demo \
-  --name medrequest-dev \
-  --query '{name:name, status:status, collation:collation}' -o table
-```
-
----
-
-## Environment Variables / App Settings
-
-The following environment variables are configured automatically by Bicep via App Service application settings:
-
-| Variable | Value | Source |
-|----------|-------|--------|
-| `DB_SERVER` | `sql-medrequest-demo.database.windows.net` | Bicep output from SQL module |
-| `DB_NAME` | `medrequest-dev` | Hardcoded in Bicep |
-| `DB_USE_MANAGED_IDENTITY` | `true` | Enables AAD auth for SQL |
-| `AZURE_CLIENT_ID` | (managed identity client ID) | Bicep output from identity module |
-| `KEY_VAULT_URI` | `https://kv-medrequest-demo.vault.azure.net/` | Bicep output from Key Vault module |
-| `APPLICATIONINSIGHTS_CONNECTION_STRING` | (App Insights connection string) | Bicep output from monitoring module |
-| `NODE_ENV` | `production` | Hardcoded in Bicep |
-
-### Manual Configuration (If Needed)
-
-If you need to add secrets (e.g., third-party API keys):
-
-```bash
-# Add secret to Key Vault
-az keyvault secret set \
-  --vault-name kv-medrequest-demo \
-  --name "ThirdPartyApiKey" \
-  --value "your-secret-value"
-
-# Reference secret in App Service using Key Vault reference syntax
-az webapp config appsettings set \
-  --resource-group rg-medrequest-demo \
-  --name app-medrequest-demo \
-  --settings THIRD_PARTY_API_KEY="@Microsoft.KeyVault(VaultName=kv-medrequest-demo;SecretName=ThirdPartyApiKey)"
-```
-
-### Connection String Format (For Reference)
-
-The API uses managed identity authentication, so no password is needed:
-
-```
-Server=sql-medrequest-demo.database.windows.net;
-Database=medrequest-dev;
-Authentication=Active Directory Default;
-Encrypt=true;
-```
-
-**Note:** The `@azure/identity` library (`DefaultAzureCredential`) handles token retrieval automatically.
+You should see the persona picker with 9 demo personas (3 hospitals × 3 roles).
 
 ---
 
 ## Troubleshooting
 
-### Common Deployment Failures
+### App Returns 502/504 or `curl` Times Out
 
-#### 1. Bicep Deployment Timeout
-
-**Symptom:** `az deployment group create` times out or hangs.
-
-**Cause:** App Gateway provisioning takes 5-10 minutes.
-
-**Fix:** Increase timeout or run in async mode:
+The App Service container is likely crash-looping or stuck.
 
 ```bash
-az deployment group create \
-  --resource-group rg-medrequest-demo \
-  --template-file infra/main.bicep \
-  --parameters infra/main.bicepparam \
-  --no-wait
-
-# Check deployment status
-az deployment group show \
-  --resource-group rg-medrequest-demo \
-  --name main \
-  --query 'properties.provisioningState' -o tsv
+# Stop and start (not just restart — this forces a fresh container)
+az webapp stop  --name app-medrequest-demo --resource-group rg-medrequest-demo
+az webapp start --name app-medrequest-demo --resource-group rg-medrequest-demo
 ```
 
-#### 2. SQL Server AAD Admin Not Set
+Then check logs to find the root cause.
 
-**Symptom:** `sqlcmd` fails with "Login failed for user" or "Cannot open server".
+### How to Check App Service Logs
 
-**Cause:** SQL Server AAD admin was not configured during deployment.
+```bash
+# Enable Docker container logging (required once)
+az webapp log config \
+  --name app-medrequest-demo \
+  --resource-group rg-medrequest-demo \
+  --docker-container-logging filesystem
 
-**Fix:** Manually set AAD admin:
+# Download logs
+az webapp log download \
+  --name app-medrequest-demo \
+  --resource-group rg-medrequest-demo \
+  --log-file webapp-logs.zip
+
+# Or stream live
+az webapp log tail \
+  --name app-medrequest-demo \
+  --resource-group rg-medrequest-demo
+```
+
+### APIM Proxy Returns 503
+
+The APIM subscription key is likely not in Key Vault, or the Key Vault reference isn't resolving.
+
+1. Verify the Key Vault secret exists: `az keyvault secret show --vault-name kv-medrequest-demo --name APIM-SUBSCRIPTION-KEY`
+2. If missing, go back to Phase 3a.
+3. If the secret exists, check the app setting resolution in Azure Portal → App Service → Configuration → look for a green checkmark on `APIM_SUBSCRIPTION_KEY`.
+
+### Key Vault References Show "KeyVaultReferenceNotResolved"
+
+The managed identity doesn't have the right role on Key Vault.
+
+```bash
+# Verify the managed identity has Key Vault Secrets User role
+az role assignment list \
+  --assignee $(az identity show --resource-group rg-medrequest-demo --name id-medrequest-demo --query principalId -o tsv) \
+  --scope /subscriptions/$(az account show --query id -o tsv)/resourceGroups/rg-medrequest-demo/providers/Microsoft.KeyVault/vaults/kv-medrequest-demo \
+  -o table
+```
+
+If empty, the Bicep deployment may have failed to assign the role. Re-run the Bicep deployment or
+manually assign:
+
+```bash
+MI_PRINCIPAL=$(az identity show --resource-group rg-medrequest-demo --name id-medrequest-demo --query principalId -o tsv)
+
+az role assignment create \
+  --assignee $MI_PRINCIPAL \
+  --role "Key Vault Secrets User" \
+  --scope /subscriptions/$(az account show --query id -o tsv)/resourceGroups/rg-medrequest-demo/providers/Microsoft.KeyVault/vaults/kv-medrequest-demo
+```
+
+After fixing, restart the app: `az webapp restart --name app-medrequest-demo --resource-group rg-medrequest-demo`
+
+### Multiple Overlapping Deploys
+
+**Never** start a second `az webapp up` while the first is still running. Overlapping deploys
+corrupt the deployment and cause unpredictable behavior.
+
+If you accidentally did this:
+
+```bash
+# Stop the app
+az webapp stop --name app-medrequest-demo --resource-group rg-medrequest-demo
+
+# Wait 30 seconds, then start
+az webapp start --name app-medrequest-demo --resource-group rg-medrequest-demo
+
+# If still broken, redeploy from scratch (Phase 4)
+```
+
+### Soft-Delete Conflicts on Re-Deployment
+
+If Bicep fails with a naming conflict for APIM or Key Vault, a previous deployment's soft-deleted
+resource is blocking creation. Purge it:
+
+```bash
+# APIM
+az apim deletedservice purge --service-name apim-medrequest-demo --location centralus
+
+# Key Vault
+az keyvault purge --name kv-medrequest-demo
+```
+
+Then re-run the Bicep deployment (Phase 2).
+
+### SQL Server AAD Admin Not Set
+
+**Symptom:** `sqlcmd` fails with "Login failed for user".
 
 ```bash
 YOUR_AAD_OBJECT_ID=$(az ad signed-in-user show --query id -o tsv)
@@ -517,56 +552,11 @@ az sql server ad-admin create \
   --object-id $YOUR_AAD_OBJECT_ID
 ```
 
-#### 3. App Service Health Check Failing
+### Database Connection Errors (`/api/ready` fails)
 
-**Symptom:** `/api/health` returns 503 or times out.
+Managed identity may not have SQL access. Re-run Phase 3d.
 
-**Cause:** App Service may not have finished starting, or managed identity permissions are missing.
-
-**Fix:** Check App Service logs:
-
-```bash
-az webapp log tail \
-  --resource-group rg-medrequest-demo \
-  --name app-medrequest-demo
-
-# Or download logs
-az webapp log download \
-  --resource-group rg-medrequest-demo \
-  --name app-medrequest-demo \
-  --log-file app-logs.zip
-```
-
-#### 4. Database Connection Errors
-
-**Symptom:** `/api/ready` returns `{"status":"error","database":"disconnected"}`.
-
-**Cause:** Managed identity may not have access to SQL, or private endpoint DNS is not resolving.
-
-**Fix:** Grant managed identity permissions to SQL:
-
-```bash
-# Get managed identity object ID
-MI_OBJECT_ID=$(az identity show \
-  --resource-group rg-medrequest-demo \
-  --name id-medrequest-demo \
-  --query principalId -o tsv)
-
-# Grant SQL db_datareader, db_datawriter roles via SQL
-sqlcmd -S $SQL_SERVER_FQDN \
-  -d medrequest-dev \
-  -G \
-  -P "$ACCESS_TOKEN" \
-  -Q "CREATE USER [id-medrequest-demo] FROM EXTERNAL PROVIDER; ALTER ROLE db_datareader ADD MEMBER [id-medrequest-demo]; ALTER ROLE db_datawriter ADD MEMBER [id-medrequest-demo];"
-```
-
-#### 5. VNet Integration Issues
-
-**Symptom:** App Service cannot reach SQL private endpoint.
-
-**Cause:** VNet integration may not be properly configured, or private DNS zone is missing.
-
-**Fix:** Verify VNet integration:
+### VNet Integration Issues (App Can't Reach SQL)
 
 ```bash
 az webapp vnet-integration list \
@@ -581,186 +571,104 @@ az webapp vnet-integration add \
   --subnet appsvc-subnet
 ```
 
-### How to Check App Service Logs
+---
 
-```bash
-# Stream logs in real-time
-az webapp log tail \
-  --resource-group rg-medrequest-demo \
-  --name app-medrequest-demo \
-  --provider application
+## Environment Variables / App Settings
 
-# Enable Application Logging (if not already enabled)
-az webapp log config \
-  --resource-group rg-medrequest-demo \
-  --name app-medrequest-demo \
-  --application-logging filesystem \
-  --level verbose
+These are configured automatically by Bicep. Do not set them manually unless troubleshooting.
+
+| Variable | Value | Source |
+|----------|-------|--------|
+| `DB_SERVER` | `sql-medrequest-demo.database.windows.net` | Bicep (SQL module) |
+| `DB_NAME` | `medrequest-dev` | Bicep |
+| `DB_USE_MANAGED_IDENTITY` | `true` | Enables AAD auth for SQL |
+| `AZURE_CLIENT_ID` | *(managed identity client ID)* | Bicep (identity module) |
+| `KEY_VAULT_URI` | `https://kv-medrequest-demo.vault.azure.net/` | Bicep (Key Vault module) |
+| `APPLICATIONINSIGHTS_CONNECTION_STRING` | *(connection string)* | Bicep (monitoring module) |
+| `NODE_ENV` | `production` | Bicep |
+| `PORT` | `8080` | Bicep |
+| `APIM_GATEWAY_URL` | `@Microsoft.KeyVault(...)` | Key Vault reference |
+| `APIM_SUBSCRIPTION_KEY` | `@Microsoft.KeyVault(...)` | Key Vault reference |
+
+### Connection String (Reference)
+
+The API uses managed identity — no password in the connection string:
+
 ```
-
-### How to Verify VNet Connectivity
-
-```bash
-# Use Kudu console to test connectivity from App Service
-az webapp ssh \
-  --resource-group rg-medrequest-demo \
-  --name app-medrequest-demo
-
-# Inside the SSH session, test SQL connectivity
-curl -v telnet://$SQL_SERVER_FQDN:1433
-
-# Test DNS resolution
-nslookup $SQL_SERVER_FQDN
-```
-
-### How to Test APIM Endpoints
-
-```bash
-# List APIM APIs (if configured)
-az apim api list \
-  --resource-group rg-medrequest-demo \
-  --service-name apim-medrequest-demo \
-  --query '[].{name:name, path:path}' -o table
-
-# Test APIM gateway with subscription key (if required)
-APIM_SUBSCRIPTION_KEY=$(az apim subscription list \
-  --resource-group rg-medrequest-demo \
-  --service-name apim-medrequest-demo \
-  --query '[0].primaryKey' -o tsv)
-
-curl -H "Ocp-Apim-Subscription-Key: $APIM_SUBSCRIPTION_KEY" \
-  https://$APIM_GATEWAY_URL/api/health
+Server=sql-medrequest-demo.database.windows.net;
+Database=medrequest-dev;
+Authentication=Active Directory Default;
+Encrypt=true;
 ```
 
 ---
 
 ## Cleanup
 
-⚠️ **WARNING:** This will delete ALL resources in the demo environment and cannot be undone.
-
-### Full Environment Teardown
+⚠️ **WARNING:** This deletes ALL resources and cannot be undone.
 
 ```bash
-# Delete the entire resource group (includes all resources)
-az group delete \
-  --name rg-medrequest-demo \
-  --yes \
-  --no-wait
-
-# Check deletion status
+az group delete --name rg-medrequest-demo --yes --no-wait
 az group exists --name rg-medrequest-demo
-# Should return: false (after a few minutes)
+# Returns "false" after a few minutes
 ```
 
-**Expected duration:** 3-5 minutes
-
-### Selective Resource Cleanup
-
-If you only want to delete specific resources:
+### Selective Cleanup (Cost Reduction)
 
 ```bash
-# Stop App Service (to reduce costs, keep resource for later)
-az webapp stop \
-  --resource-group rg-medrequest-demo \
-  --name app-medrequest-demo
+# Stop App Service (keep resource, stop billing compute)
+az webapp stop --name app-medrequest-demo --resource-group rg-medrequest-demo
 
-# Delete App Gateway (largest cost component ~$146/mo)
-az network application-gateway delete \
-  --resource-group rg-medrequest-demo \
-  --name appgw-medrequest-demo
+# Delete App Gateway (biggest cost: ~$146/mo)
+az network application-gateway delete --resource-group rg-medrequest-demo --name appgw-medrequest-demo
 ```
 
-### Cost Considerations
+### Cost Breakdown
 
-Leaving the demo environment running will incur these approximate monthly costs:
-
-| Resource | SKU/Tier | Estimated Cost (USD/month) |
-|----------|----------|----------------------------|
-| App Gateway Standard_v2 | 2 instances autoscale | ~$146 |
-| App Service | B1 (Basic) | ~$13 |
+| Resource | SKU | ~USD/month |
+|----------|-----|-----------|
+| App Gateway Standard_v2 | 0-2 instances | ~$146 |
+| App Service | B1 | ~$13 |
 | Azure SQL | Basic (5 DTU) | ~$5 |
-| APIM | Consumption (pay-per-call) | ~$1-5 (low traffic) |
-| Functions | Consumption | ~$0-2 (low invocations) |
+| APIM | Consumption | ~$1-5 |
+| Functions | Consumption | ~$0-2 |
 | Storage | Standard LRS | ~$1-2 |
 | Log Analytics | Pay-as-you-go | ~$2-5 |
-| Key Vault | Standard | ~$0.03 per 10k operations |
-| **Total** | | **~$170-180/month** |
-
-**Recommendation:** Delete the resource group when testing is complete to avoid charges.
+| Key Vault | Standard | ~$0 |
+| **Total** | | **~$170-180** |
 
 ---
 
 ## Known Limitations (POC)
 
-This is a proof-of-concept deployment with the following limitations:
-
-1. **Header-based authentication is demo-only**
-   - Not secure for production
-   - No token validation
-   - Easily spoofed
-   - **Production requirement:** Replace with OAuth/MSAL + JWT validation
-
-2. **No automated DB migrations in CI/CD**
-   - Migrations must be run manually via `sqlcmd`
-   - No migration version tracking
-   - **Future enhancement:** Add migration tooling (e.g., `node-pg-migrate`, Flyway)
-
-3. **APIM Consumption tier cold start**
-   - First request after idle period may take 10-20 seconds
-   - No VNet integration capability
-   - **If latency is critical:** Upgrade to Developer or Premium tier
-
-4. **App Gateway provisioning time**
-   - Takes 5-10 minutes to create
-   - Cannot be skipped (WAF requirement)
-   - **Cost tradeoff:** ~$146/mo for WAF protection
-
-5. **No CI/CD secrets configured**
-   - GitHub Actions workflow requires manual secret setup
-   - See `.github/workflows/deploy.yml` for required secrets:
-     - `AZURE_CLIENT_ID`
-     - `AZURE_TENANT_ID`
-     - `AZURE_SUBSCRIPTION_ID`
-     - `SQL_AAD_ADMIN_OBJECT_ID`
-
-6. **No HTTPS custom domain**
-   - Using default `*.azurewebsites.net` domain
-   - SSL/TLS is provided by Azure
-   - **For custom domain:** Add to App Service and App Gateway
-
-7. **Basic tier App Service**
-   - No deployment slots (cannot do blue/green deploys)
-   - Limited autoscale capability
-   - **For production:** Upgrade to Standard tier
-
-8. **Row-Level Security (RLS) set per-query**
-   - `SESSION_CONTEXT` is reset per query, not per connection
-   - Ensures tenant isolation in connection pooling scenarios
-   - **Performance note:** Adds ~1ms overhead per query
+1. **Header-based auth is demo-only** — no token validation, easily spoofed. Production: OAuth/MSAL + JWT.
+2. **No automated DB migrations** — must run `sqlcmd` manually. Future: Flyway or similar.
+3. **APIM Consumption cold start** — first request after idle: 10-20s. Upgrade to Developer tier if needed.
+4. **App Gateway provisioning** — 5-15 minutes, ~$146/mo. Required for WAF.
+5. **No CI/CD secrets pre-configured** — see Appendix for GitHub Actions OIDC setup.
+6. **No custom domain** — uses `*.azurewebsites.net`. SSL provided by Azure.
+7. **B1 App Service** — no deployment slots, limited autoscale.
+8. **RLS set per-query** — `SESSION_CONTEXT` reset per query (not per connection) for pool safety. ~1ms overhead.
+9. **Startup command sensitivity** — must be `node server.js`. `az webapp up` may overwrite it silently.
 
 ---
 
-## Appendix: CI/CD Setup
-
-To enable automated deployments via GitHub Actions, configure the following secrets in your GitHub repository:
+## Appendix: CI/CD Setup (GitHub Actions)
 
 ```bash
-# 1. Create Azure AD App Registration for OIDC
-az ad app create --display-name "MedRequest GitHub Actions" \
-  --query appId -o tsv
-
-# 2. Create Service Principal
+# 1. Create AAD App Registration for OIDC
+az ad app create --display-name "MedRequest GitHub Actions" --query appId -o tsv
 APP_ID=$(az ad app list --display-name "MedRequest GitHub Actions" --query '[0].appId' -o tsv)
 az ad sp create --id $APP_ID
 
-# 3. Assign Contributor role
+# 2. Assign Contributor role
 SUBSCRIPTION_ID=$(az account show --query id -o tsv)
 az role assignment create \
   --assignee $APP_ID \
   --role Contributor \
   --scope /subscriptions/$SUBSCRIPTION_ID
 
-# 4. Configure federated credentials for GitHub Actions
+# 3. Configure federated credentials
 az ad app federated-credential create \
   --id $APP_ID \
   --parameters '{
@@ -770,37 +678,15 @@ az ad app federated-credential create \
     "audiences": ["api://AzureADTokenExchange"]
   }'
 
-# 5. Set GitHub repository secrets
+# 4. Set GitHub secrets
 gh secret set AZURE_CLIENT_ID --body "$APP_ID"
 gh secret set AZURE_TENANT_ID --body "$(az account show --query tenantId -o tsv)"
 gh secret set AZURE_SUBSCRIPTION_ID --body "$SUBSCRIPTION_ID"
 gh secret set SQL_AAD_ADMIN_OBJECT_ID --body "$(az ad signed-in-user show --query id -o tsv)"
 ```
 
-Once configured, every push to `main` will trigger automatic deployment via `.github/workflows/deploy.yml`.
-
 ---
 
-## Quick Reference: Sample Deployment Command
-
-**Complete deployment in one command:**
-
-```bash
-# Replace placeholders and run
-az deployment group create \
-  --resource-group rg-medrequest-demo \
-  --template-file infra/main.bicep \
-  --parameters environment=demo \
-  --parameters location=centralus \
-  --parameters projectName=medrequest \
-  --parameters apimPublisherEmail=your-email@example.com \
-  --parameters sqlAadAdminObjectId=$(az ad signed-in-user show --query id -o tsv) \
-  --parameters appServicePlanSku=B1 \
-  --parameters wafMode=Detection
-```
-
----
-
-**Last Updated:** 2025-01-14  
-**Maintained By:** Livingston (Infra/DevOps)  
+**Last Updated:** 2026-05-13
+**Maintained By:** Rusty (Architecture), Livingston (Infra/DevOps)
 **Related Docs:** `PROJECT-STRUCTURE.md`, `DEMO-AUTH-DESIGN.md`, `infra/main.bicep`
