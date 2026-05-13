@@ -32,7 +32,7 @@ const ExplorerView = (() => {
       description: 'Shows which tenant the current session belongs to, as set by SESSION_CONTEXT.',
     },
     {
-      key: 'cross_tenant',
+      key: 'cross_tenant_proof',
       name: 'Cross-Tenant Proof',
       icon: '🛡️',
       description: 'Proves RLS prevents seeing other tenants\' data — even with a direct query against the full table.',
