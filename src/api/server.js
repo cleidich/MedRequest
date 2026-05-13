@@ -14,7 +14,9 @@ const integrationRoutes = require('./routes/integration');
 const debugRoutes       = require('./routes/debug');
 const configRoutes      = require('./routes/config');
 const proxyRoutes       = require('./routes/proxy');
-const { closePool }  = require('./db/pool');
+const { getPool, closePool }  = require('./db/pool');
+const { runMigrations }      = require('./db/migrate');
+const { runSeed }            = require('./db/seed');
 
 const app = express();
 
@@ -64,19 +66,36 @@ app.get('/', (_req, res) => {
 app.use(errorHandler);
 
 // ---------------------------------------------------------------------------
-// Start server
+// Start server (run migrations + seed first)
 // ---------------------------------------------------------------------------
-const server = app.listen(config.port, () => {
-  console.log(`[MedRequest API] Listening on port ${config.port}`);
-});
+let server;
+
+(async () => {
+  try {
+    const pool = await getPool();
+    await runMigrations(pool);
+    await runSeed(pool);
+  } catch (err) {
+    console.error('[startup] Migration/seed error (non-fatal):', err.message);
+  }
+
+  server = app.listen(config.port, () => {
+    console.log(`[MedRequest API] Listening on port ${config.port}`);
+  });
+})();
 
 // Graceful shutdown
 async function shutdown(signal) {
   console.log(`\n[MedRequest API] Received ${signal}, shutting down...`);
-  server.close(async () => {
+  if (server) {
+    server.close(async () => {
+      await closePool();
+      process.exit(0);
+    });
+  } else {
     await closePool();
     process.exit(0);
-  });
+  }
 }
 
 process.on('SIGTERM', () => shutdown('SIGTERM'));
