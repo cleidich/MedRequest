@@ -15,7 +15,7 @@ echo "🔧 Running post-provision setup..."
 export SQL_SERVER="${AZURE_SQL_SERVER_NAME:?ERROR: AZURE_SQL_SERVER_NAME not set — check main.bicep outputs}"
 export SQL_DATABASE="${AZURE_SQL_DATABASE_NAME:?ERROR: AZURE_SQL_DATABASE_NAME not set — check main.bicep outputs}"
 MI_NAME="${AZURE_MANAGED_IDENTITY_NAME:?ERROR: AZURE_MANAGED_IDENTITY_NAME not set — check main.bicep outputs}"
-RG="rg-medrequest-${AZURE_ENV_NAME}"
+RG="${AZURE_RESOURCE_GROUP:?ERROR: AZURE_RESOURCE_GROUP not set — are you running via azd?}"
 
 echo "  Environment: ${AZURE_ENV_NAME}"
 echo "  Resource Group: ${RG}"

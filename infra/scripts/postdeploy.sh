@@ -8,7 +8,7 @@ echo "🚀 Running post-deploy verification..."
 : "${AZURE_ENV_NAME:?ERROR: AZURE_ENV_NAME is not set. Are you running via azd?}"
 
 APP_NAME="${AZURE_APP_SERVICE_NAME:?ERROR: AZURE_APP_SERVICE_NAME not set — check main.bicep outputs}"
-RG="rg-medrequest-${AZURE_ENV_NAME}"
+RG="${AZURE_RESOURCE_GROUP:?ERROR: AZURE_RESOURCE_GROUP not set — are you running via azd?}"
 
 # --- Step 1: Set startup command ---
 echo "  Setting startup command to 'node server.js'..."

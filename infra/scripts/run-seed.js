@@ -14,13 +14,16 @@ const sql  = require(path.resolve(__dirname, '../../src/api/node_modules/mssql')
 
 const { runSeed } = require(path.resolve(__dirname, '../../src/api/db/seed'));
 
-const server   = process.env.SQL_SERVER  || process.env.DB_SERVER;
-const database = process.env.SQL_DATABASE || process.env.DB_NAME;
+const rawServer = process.env.SQL_SERVER  || process.env.DB_SERVER;
+const database  = process.env.SQL_DATABASE || process.env.DB_NAME;
 
-if (!server || !database) {
+if (!rawServer || !database) {
   console.error('[run-seed] Missing SQL_SERVER/DB_SERVER or SQL_DATABASE/DB_NAME env vars');
   process.exit(1);
 }
+
+// Ensure FQDN — append .database.windows.net if not already present
+const server = rawServer.includes('.') ? rawServer : `${rawServer}.database.windows.net`;
 
 async function getAadToken() {
   const raw = execSync(
