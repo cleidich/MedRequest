@@ -131,7 +131,6 @@ az deployment group create \
 | `projectName` | No | `medrequest` | Base name for all resources |
 | `apimPublisherEmail` | **Yes** | — | Your email for APIM notifications |
 | `sqlAadAdminObjectId` | No | Managed identity | Your AAD object ID for SQL admin |
-| `apimSubscriptionKey` | No | `''` | Set post-deploy (see Phase 3a) |
 | `wafMode` | No | `Detection` | `Detection` or `Prevention` |
 | `appServicePlanSku` | No | `B1` | `B1` minimum for VNet integration |
 | `tags` | No | Auto-generated | `project`, `environment`, `managedBy` |
@@ -170,27 +169,16 @@ echo "APIM:       $APIM_GATEWAY_URL"
 
 These steps MUST be done **in order** after Bicep completes.
 
-### 3a. Store APIM Subscription Key in Key Vault
+### 3a. APIM Subscription Key in Key Vault (Automated)
 
-The app reads the APIM subscription key from Key Vault via a Key Vault reference
-(`@Microsoft.KeyVault(...)` in app settings). The secret must exist or the app will fail to start.
+> **No manual step required.** The Bicep deployment automatically retrieves the APIM built-in
+> subscription key via `listSecrets()` and stores it in Key Vault as `APIM-SUBSCRIPTION-KEY`.
+> The App Service reads it at runtime via a Key Vault reference (`@Microsoft.KeyVault(...)` in
+> app settings).
 
-```bash
-APIM_KEY=$(az apim subscription list \
-  --resource-group rg-medrequest-demo \
-  --service-name apim-medrequest-demo \
-  --query "[?displayName=='Built-in all-access subscription'].primaryKey" -o tsv)
+### 3b. Grant Your User Key Vault Access (if needed for manual secret operations)
 
-az keyvault secret set \
-  --vault-name kv-medrequest-demo \
-  --name APIM-SUBSCRIPTION-KEY \
-  --value "$APIM_KEY"
-```
-
-### 3b. Grant Your User Key Vault Access (if needed)
-
-If the `az keyvault secret set` command above fails with a 403, you need the **Key Vault Secrets
-Officer** role:
+If you need to manually update Key Vault secrets, you need the **Key Vault Secrets Officer** role:
 
 ```bash
 az role assignment create \
@@ -198,8 +186,6 @@ az role assignment create \
   --role "Key Vault Secrets Officer" \
   --scope /subscriptions/$(az account show --query id -o tsv)/resourceGroups/rg-medrequest-demo/providers/Microsoft.KeyVault/vaults/kv-medrequest-demo
 ```
-
-Then retry step 3a.
 
 ### 3c. Add SQL Firewall Rule for Your IP
 

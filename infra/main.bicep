@@ -26,10 +26,6 @@ param apimPublisherEmail string
 @description('AAD admin object ID for SQL Server')
 param sqlAadAdminObjectId string = ''
 
-@description('APIM subscription key (sensitive — provide at deploy time or set post-deploy)')
-@secure()
-param apimSubscriptionKey string = ''
-
 @description('WAF mode: Detection or Prevention')
 param wafMode string = 'Detection'
 
@@ -92,7 +88,6 @@ module keyVault 'modules/key-vault.bicep' = {
     tenantId: subscription().tenantId
     managedIdentityPrincipalId: identity.outputs.principalId
     apimGatewayUrl: apimGatewayUrl
-    apimSubscriptionKey: apimSubscriptionKey
     logAnalyticsWorkspaceId: monitoring.outputs.logAnalyticsId
     tags: tags
   }
@@ -174,7 +169,30 @@ module apim 'modules/apim.bicep' = {
   }
 }
 
-// 10. App Gateway — WAF-enabled entry point
+// 10. APIM subscription key → Key Vault (auto-retrieved, no manual step needed)
+// References the built-in all-access subscription after APIM deploys, then stores the
+// primary key in Key Vault so App Service can read it via Key Vault reference.
+resource apimInstance 'Microsoft.ApiManagement/service@2023-09-01-preview' existing = {
+  name: 'apim-${baseName}'
+}
+
+resource apimBuiltInSubscription 'Microsoft.ApiManagement/service/subscriptions@2023-09-01-preview' existing = {
+  name: 'master'
+  parent: apimInstance
+}
+
+resource apimKeySecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
+  name: '${keyVaultName}/APIM-SUBSCRIPTION-KEY'
+  properties: {
+    value: apimBuiltInSubscription.listSecrets().primaryKey
+  }
+  dependsOn: [
+    apim
+    keyVault
+  ]
+}
+
+// 11. App Gateway — WAF-enabled entry point
 module appGateway 'modules/app-gateway.bicep' = {
   name: 'appgateway-deploy'
   params: {

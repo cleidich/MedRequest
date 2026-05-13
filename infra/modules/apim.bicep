@@ -125,7 +125,7 @@ resource apiPolicy 'Microsoft.ApiManagement/service/apis/policies@2023-09-01-pre
   <inbound>
     <base />
     <rate-limit calls="100" renewal-period="60" />
-    <cors allow-credentials="true">
+    <cors>
       <allowed-origins>
         <origin>*</origin>
       </allowed-origins>
@@ -141,9 +141,15 @@ resource apiPolicy 'Microsoft.ApiManagement/service/apis/policies@2023-09-01-pre
         <header>*</header>
       </allowed-headers>
     </cors>
-    <set-header name="X-Tenant-Id" exists-action="skip" />
-    <set-header name="X-User-Id" exists-action="skip" />
-    <set-header name="X-User-Role" exists-action="skip" />
+    <set-header name="X-Tenant-Id" exists-action="override">
+      <value>@(context.Request.Headers.GetValueOrDefault("X-Tenant-Id",""))</value>
+    </set-header>
+    <set-header name="X-User-Id" exists-action="override">
+      <value>@(context.Request.Headers.GetValueOrDefault("X-User-Id",""))</value>
+    </set-header>
+    <set-header name="X-User-Role" exists-action="override">
+      <value>@(context.Request.Headers.GetValueOrDefault("X-User-Role",""))</value>
+    </set-header>
     <set-backend-service backend-id="medrequest-backend" />
   </inbound>
   <backend>
@@ -304,6 +310,9 @@ output apimId string = apim.id
 
 @description('Name of the APIM instance')
 output apimName string = apim.name
+
+@description('Symbolic name of the APIM service (for existing-resource lookups)')
+output apimServiceName string = apim.name
 
 @description('Gateway URL of the APIM instance')
 output apimGatewayUrl string = apim.properties.gatewayUrl
