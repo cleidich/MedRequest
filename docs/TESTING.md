@@ -2,6 +2,8 @@
 
 > **This is the definitive deployment guide.** Someone with zero context should be able to deploy
 > MedRequest from scratch using only this document.
+>
+> **Recommended path:** Use `azd up` (see [Quick Deploy with azd](#quick-deploy-with-azd-recommended) below) for a single-command deployment. The manual phases are preserved for reference and troubleshooting.
 
 ## Target Environment
 
@@ -19,15 +21,15 @@
 
 ### Required Tools
 
-| Tool | Minimum Version | Check Command |
-|------|----------------|---------------|
-| Azure CLI | 2.50+ | `az version` |
-| Bicep CLI | 0.20+ (bundled) | `az bicep version` |
-| Node.js | 18+ LTS | `node --version` |
-| sqlcmd | Latest | `sqlcmd -?` ([Install guide](https://learn.microsoft.com/sql/tools/sqlcmd-utility)) |
-| jq | Any | `jq --version` |
-| curl | Any | `curl --version` |
-| GitHub CLI | (optional) | `gh --version` |
+| Tool | Minimum Version | Check Command | Install |
+|------|----------------|---------------|---------|
+| Azure CLI | 2.50+ | `az version` | [Install](https://learn.microsoft.com/cli/azure/install-azure-cli) |
+| Azure Developer CLI (azd) | 1.5+ | `azd version` | [Install](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd) |
+| Bicep CLI | 0.20+ (bundled) | `az bicep version` | Bundled with Azure CLI |
+| Node.js | 18+ LTS | `node --version` | [Install](https://nodejs.org/) |
+| jq | Any | `jq --version` | `brew install jq` / `apt install jq` |
+| curl | Any | `curl --version` | Pre-installed on most systems |
+| GitHub CLI | (optional) | `gh --version` | [Install](https://cli.github.com/) |
 
 ### Required Azure Permissions
 
@@ -59,7 +61,104 @@ You will also need your **email address** for the `apimPublisherEmail` parameter
 
 ---
 
+## Quick Deploy with azd (Recommended)
+
+> **This is the fastest path from clone to running app.** `azd up` handles infrastructure
+> provisioning, database setup, migrations, seeding, app deployment, and health verification
+> in a single command. The manual phases below are preserved for reference and troubleshooting.
+
+### Step 1: Authenticate
+
+```bash
+az login
+azd auth login
+```
+
+### Step 2: Create an Environment
+
+```bash
+azd env new demo
+azd env set AZURE_LOCATION centralus
+```
+
+> Replace `demo` with any environment name (e.g., `dev`, `staging`). This name flows into
+> resource naming: `rg-medrequest-demo`, `app-medrequest-demo`, etc.
+
+### Step 3: Deploy Everything
+
+```bash
+azd up
+```
+
+### What Happens During `azd up`
+
+| Phase | Hook / Stage | What It Does |
+|-------|-------------|-------------|
+| **preprovision** | `infra/scripts/preprovision.sh` | Checks for soft-deleted APIM and Key Vault resources that would block provisioning |
+| **provision** | Bicep (`infra/main.bicep`) | Creates all Azure resources: App Service, SQL, APIM, Key Vault, App Gateway, VNet, monitoring (~15–30 min for APIM) |
+| **postprovision** | `infra/scripts/postprovision.sh` | Adds deployer IP to SQL firewall, grants managed identity SQL access, runs database migrations, seeds demo data |
+| **prepackage** | (inline in `azure.yaml`) | Syncs `src/frontend/*` → `src/api/public/` |
+| **deploy** | azd zip deploy | Packages and deploys `src/api` to App Service |
+| **postdeploy** | `infra/scripts/postdeploy.sh` | Sets `node server.js` startup command, restarts app, runs health check |
+
+> ⏱ **Total time:** ~20–40 minutes on first deploy (APIM provisioning dominates). Subsequent
+> `azd deploy` (code-only) takes 2–5 minutes.
+
+### Step 4: Access the App
+
+After `azd up` completes, the postdeploy hook prints the app URL:
+
+```
+🎉 Deployment complete!
+   App URL: https://app-medrequest-demo.azurewebsites.net
+   Health:  https://app-medrequest-demo.azurewebsites.net/api/health
+   Ready:   https://app-medrequest-demo.azurewebsites.net/api/ready
+```
+
+Open the App URL in a browser to see the persona picker with 9 demo personas (3 hospitals × 3 roles).
+
+### Redeploying Code Changes
+
+To redeploy just the application code (without re-provisioning infrastructure):
+
+```bash
+azd deploy
+```
+
+This runs prepackage (frontend sync) → zip deploy → postdeploy (startup command + health check).
+
+### Managing Multiple Environments
+
+```bash
+azd env list                  # List all environments
+azd env select staging        # Switch to a different environment
+azd env new staging           # Create a new environment
+azd env set AZURE_LOCATION eastus  # Set a variable for the current environment
+```
+
+### Tearing Down Resources
+
+```bash
+azd down                      # Destroy all resources in the current environment
+```
+
+> ⚠️ This deletes everything in the resource group. Use `azd down --purge` to also purge
+> soft-deleted APIM and Key Vault resources (prevents conflicts on re-deploy).
+
+---
+
+## Manual Deployment Phases (Reference)
+
+> The phases below document the individual steps that `azd up` automates. Use them for
+> **troubleshooting**, **understanding what azd does under the hood**, or if you need to
+> run specific steps manually.
+
+---
+
 ## Phase 1 — Pre-Deployment Checks
+
+> ℹ️ **If you used `azd up`, these checks were handled automatically by the `preprovision` hook.**
+> The manual steps below are for reference or troubleshooting.
 
 > ⚠️ **Do not skip this.** Azure soft-deletes certain resources. If a previous deployment was
 > torn down, leftover soft-deleted resources will cause naming conflicts and cryptic errors.
@@ -102,6 +201,10 @@ az group create \
 ---
 
 ## Phase 2 — Infrastructure Deployment (Bicep)
+
+> ℹ️ **If you used `azd up`, infrastructure was provisioned automatically.** The `azd provision`
+> step runs this Bicep deployment for you, and Bicep outputs are captured as azd environment
+> variables. The manual steps below are for reference or troubleshooting.
 
 This provisions ALL Azure resources: App Service, Azure SQL, Key Vault, APIM, App Gateway (WAF),
 Functions, Storage, VNet, Monitoring (App Insights + Log Analytics), and a user-assigned managed
@@ -167,6 +270,10 @@ echo "APIM:       $APIM_GATEWAY_URL"
 
 ## Phase 3 — Post-Infrastructure Setup
 
+> ℹ️ **If you used `azd up`, these steps were handled automatically by the `postprovision` hook**
+> (`infra/scripts/postprovision.sh`). The hook uses Node.js + mssql instead of sqlcmd for all
+> database operations. The manual steps below are for reference or troubleshooting.
+
 These steps MUST be done **in order** after Bicep completes.
 
 ### 3a. APIM Subscription Key in Key Vault (Automated)
@@ -205,61 +312,82 @@ az sql server firewall-rule create \
 The user-assigned managed identity (`id-medrequest-demo`) needs `db_datareader` and `db_datawriter`
 roles in the SQL database so the app can read/write data.
 
+> **Note:** The `postprovision` hook handles this automatically using Node.js + mssql (no sqlcmd
+> required). The manual sqlcmd approach below is preserved for reference.
+
 ```bash
 ACCESS_TOKEN=$(az account get-access-token --resource https://database.windows.net/ --query accessToken -o tsv)
 
-sqlcmd -S sql-medrequest-demo.database.windows.net \
-  -d medrequest-dev \
-  -G \
-  -P "$ACCESS_TOKEN" \
-  -Q "CREATE USER [id-medrequest-demo] FROM EXTERNAL PROVIDER; ALTER ROLE db_datareader ADD MEMBER [id-medrequest-demo]; ALTER ROLE db_datawriter ADD MEMBER [id-medrequest-demo];"
+# Using Node.js (recommended — no sqlcmd dependency):
+node -e "
+const sql = require('./src/api/node_modules/mssql');
+const config = {
+  server: 'sql-medrequest-demo.database.windows.net',
+  database: 'medrequest-dev',
+  authentication: {
+    type: 'azure-active-directory-access-token',
+    options: { token: process.env.ACCESS_TOKEN }
+  },
+  options: { encrypt: true, trustServerCertificate: false }
+};
+(async () => {
+  const pool = await sql.connect(config);
+  await pool.request().query(\`
+    IF NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE name = 'id-medrequest-demo')
+    BEGIN
+      CREATE USER [id-medrequest-demo] FROM EXTERNAL PROVIDER;
+      ALTER ROLE db_datareader ADD MEMBER [id-medrequest-demo];
+      ALTER ROLE db_datawriter ADD MEMBER [id-medrequest-demo];
+      GRANT EXECUTE TO [id-medrequest-demo];
+    END
+  \`);
+  await pool.close();
+  console.log('✅ Managed identity SQL access granted');
+})();
+"
 ```
 
 ### 3e. Run Database Migrations
 
-```bash
-ACCESS_TOKEN=$(az account get-access-token --resource https://database.windows.net/ --query accessToken -o tsv)
+> **Note:** Migrations now run automatically at app startup via `src/api/db/migrate.js` and during
+> `azd up` via `infra/scripts/run-migrations.js`. The Node.js migration runner tracks applied
+> migrations in a `_migrations` table and handles GO batch separators. Manual execution is only
+> needed for troubleshooting.
 
-sqlcmd -S sql-medrequest-demo.database.windows.net \
-  -d medrequest-dev \
-  -G \
-  -P "$ACCESS_TOKEN" \
-  -i db/migrations/001-initial-schema.sql
+```bash
+# Automated approach (recommended):
+cd src/api && npm install && cd ../..
+node infra/scripts/run-migrations.js
 
 # Verify schema
-sqlcmd -S sql-medrequest-demo.database.windows.net \
-  -d medrequest-dev \
-  -G \
-  -P "$ACCESS_TOKEN" \
-  -Q "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE='BASE TABLE'"
+ACCESS_TOKEN=$(az account get-access-token --resource https://database.windows.net/ --query accessToken -o tsv)
 ```
 
 **Expected output:** `tenants`, `users`, `requests` tables.
 
 ### 3f. Seed Demo Data
 
-```bash
-sqlcmd -S sql-medrequest-demo.database.windows.net \
-  -d medrequest-dev \
-  -G \
-  -P "$ACCESS_TOKEN" \
-  -i db/seed/demo-data.sql
+> **Note:** Seeding now runs automatically during `azd up` (via `infra/scripts/run-seed.js`) and
+> at app startup (via `src/api/db/seed.js`). The seeder is conditional — it only inserts data when
+> the `tenants` table is empty.
 
-# Verify
-sqlcmd -S sql-medrequest-demo.database.windows.net \
-  -d medrequest-dev \
-  -G \
-  -P "$ACCESS_TOKEN" \
-  -Q "SELECT name FROM tenants"
+```bash
+# Automated approach (recommended):
+node infra/scripts/run-seed.js
 ```
 
-**Expected:** Mercy General Hospital, St. Claire Medical Center, Harbor Medical Center.
+**Expected:** After seeding, the tenants table should contain: Mercy General Hospital, St. Claire Medical Center, Harbor Medical Center.
 
 ---
 
 ## Phase 4 — Application Deployment
 
-> ⚠️ **THIS IS THE MOST FAILURE-PRONE STEP.** Read this entire section before running anything.
+> ℹ️ **If you used `azd up` or `azd deploy`, application deployment was handled automatically.**
+> `azd` uses zip deploy (more reliable than `az webapp up`), syncs frontend files via the
+> `prepackage` hook, and fixes the startup command via the `postdeploy` hook. The manual steps
+> below are for reference or troubleshooting.
+
+> ⚠️ **THIS IS THE MOST FAILURE-PRONE STEP (when done manually).** Read this entire section before running anything.
 
 ### 4a. Sync Frontend Files
 
@@ -355,6 +483,9 @@ cd ../..
 ---
 
 ## Phase 5 — Verification Checklist
+
+> ℹ️ **If you used `azd up`, the `postdeploy` hook automatically runs a health check and prints
+> the app URL.** The checks below are useful for manual verification or troubleshooting.
 
 Run these checks **in order** after deploying. Every check must pass before the deployment is
 considered successful.
@@ -526,7 +657,7 @@ Then re-run the Bicep deployment (Phase 2).
 
 ### SQL Server AAD Admin Not Set
 
-**Symptom:** `sqlcmd` fails with "Login failed for user".
+**Symptom:** Node.js migration scripts or SQL operations fail with "Login failed for user".
 
 ```bash
 YOUR_AAD_OBJECT_ID=$(az ad signed-in-user show --query id -o tsv)
@@ -540,7 +671,8 @@ az sql server ad-admin create \
 
 ### Database Connection Errors (`/api/ready` fails)
 
-Managed identity may not have SQL access. Re-run Phase 3d.
+Managed identity may not have SQL access. Re-run Phase 3d, or re-run `azd up` which will
+re-execute the postprovision hook.
 
 ### VNet Integration Issues (App Can't Reach SQL)
 
@@ -593,6 +725,15 @@ Encrypt=true;
 
 ⚠️ **WARNING:** This deletes ALL resources and cannot be undone.
 
+### Using azd (Recommended)
+
+```bash
+azd down              # Destroys all resources in the current environment
+azd down --purge      # Also purges soft-deleted APIM and Key Vault resources
+```
+
+### Using Azure CLI (Manual)
+
 ```bash
 az group delete --name rg-medrequest-demo --yes --no-wait
 az group exists --name rg-medrequest-demo
@@ -628,14 +769,14 @@ az network application-gateway delete --resource-group rg-medrequest-demo --name
 ## Known Limitations (POC)
 
 1. **Header-based auth is demo-only** — no token validation, easily spoofed. Production: OAuth/MSAL + JWT.
-2. **No automated DB migrations** — must run `sqlcmd` manually. Future: Flyway or similar.
-3. **APIM Consumption cold start** — first request after idle: 10-20s. Upgrade to Developer tier if needed.
-4. **App Gateway provisioning** — 5-15 minutes, ~$146/mo. Required for WAF.
-5. **No CI/CD secrets pre-configured** — see Appendix for GitHub Actions OIDC setup.
-6. **No custom domain** — uses `*.azurewebsites.net`. SSL provided by Azure.
-7. **B1 App Service** — no deployment slots, limited autoscale.
-8. **RLS set per-query** — `SESSION_CONTEXT` reset per query (not per connection) for pool safety. ~1ms overhead.
-9. **Startup command sensitivity** — must be `node server.js`. `az webapp up` may overwrite it silently.
+2. **APIM Consumption cold start** — first request after idle: 10-20s. Upgrade to Developer tier if needed.
+3. **App Gateway provisioning** — 5-15 minutes, ~$146/mo. Required for WAF.
+4. **No CI/CD secrets pre-configured** — see Appendix for GitHub Actions OIDC setup.
+5. **No custom domain** — uses `*.azurewebsites.net`. SSL provided by Azure.
+6. **B1 App Service** — no deployment slots, limited autoscale.
+7. **RLS set per-query** — `SESSION_CONTEXT` reset per query (not per connection) for pool safety. ~1ms overhead.
+8. **Startup command sensitivity** — must be `node server.js`. The `postdeploy` hook sets this automatically when using `azd`.
+9. **Database migrations at startup** — the Node.js migration runner (`src/api/db/migrate.js`) runs on every app start. This is fast for our small schema but adds a few seconds to cold starts.
 
 ---
 
@@ -673,6 +814,6 @@ gh secret set SQL_AAD_ADMIN_OBJECT_ID --body "$(az ad signed-in-user show --quer
 
 ---
 
-**Last Updated:** 2026-05-13
+**Last Updated:** 2026-05-14
 **Maintained By:** Rusty (Architecture), Livingston (Infra/DevOps)
-**Related Docs:** `PROJECT-STRUCTURE.md`, `DEMO-AUTH-DESIGN.md`, `infra/main.bicep`
+**Related Docs:** `README.md`, `DEPLOYMENT-SIMPLIFICATION.md`, `MULTI-TENANT-ARCHITECTURE.md`, `infra/main.bicep`, `azure.yaml`

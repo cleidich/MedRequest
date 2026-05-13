@@ -144,9 +144,11 @@ patient-comm-app/
 │   │   ├── services/
 │   │   │   ├── requestService.js    # Business logic
 │   │   │   └── integrationService.js
-│   │   ├── db/
+│   ├── db/
 │   │   │   ├── pool.js              # Azure SQL connection pool
-│   │   │   └── queries.js           # Parameterized SQL queries
+│   │   │   ├── queries.js           # Parameterized SQL queries
+│   │   │   ├── migrate.js           # Node.js migration runner (tracks via _migrations table)
+│   │   │   └── seed.js              # Conditional demo data seeder
 │   │   └── config/
 │   │       └── index.js             # Environment config (Key Vault)
 │   │
@@ -173,7 +175,11 @@ patient-comm-app/
 │   │   ├── networking.bicep
 │   │   └── managed-identity.bicep
 │   └── scripts/
-│       └── seed-sql.sh              # DB schema bootstrap
+│       ├── preprovision.sh          # Pre-flight: soft-delete checks
+│       ├── postprovision.sh         # SQL firewall, identity grant, migrations, seed
+│       ├── postdeploy.sh            # Startup command fix + health check
+│       ├── run-migrations.js        # Standalone migration runner (AAD token auth)
+│       └── run-seed.js              # Standalone seed runner (AAD token auth)
 │
 ├── db/
 │   ├── migrations/
@@ -186,6 +192,7 @@ patient-comm-app/
 │   └── deploy.yml                   # Deploy infra + app
 │
 ├── .gitignore
+├── azure.yaml                       # azd service definition + lifecycle hooks
 ├── README.md                        # This file
 └── package.json                     # Root workspace (optional)
 ```
@@ -198,6 +205,7 @@ Before you begin, ensure you have:
 
 - **Node.js** 18+ and npm
 - **Azure CLI** (`az` command)
+- **Azure Developer CLI** (`azd` command) — [Install](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd)
 - **Bicep CLI** (typically included with Azure CLI v2.26+)
 - **GitHub CLI** (`gh` command) — for managing secrets
 - **Azure Subscription** with Owner or Contributor role
@@ -212,6 +220,9 @@ brew install node
 # Azure CLI
 brew install azure-cli
 
+# Azure Developer CLI (azd)
+curl -fsSL https://aka.ms/install-azd.sh | bash
+
 # Bicep (if not included)
 az bicep install
 
@@ -221,7 +232,7 @@ brew install gh
 # Verify installations
 node --version
 az --version
-bicep --version
+azd version
 gh --version
 ```
 
@@ -298,14 +309,68 @@ docker run -e "ACCEPT_EULA=Y" -e "SA_PASSWORD=YourPassword123!" \
   -p 1433:1433 --name mssql \
   mcr.microsoft.com/mssql/server:2019-latest
 
-# Then run migrations
-cd db
-sqlcmd -S localhost -U sa -P YourPassword123! -i migrations/001-initial-schema.sql
+# Then run migrations (handled automatically on app startup)
+cd src/api && npm install && npm start
+# Migrations run automatically via src/api/db/migrate.js when the server starts
 ```
 
 ---
 
 ## Deployment
+
+MedRequest uses the **Azure Developer CLI (`azd`)** for streamlined deployment. A single `azd up`
+command provisions all Azure infrastructure, configures the database, runs migrations, seeds demo
+data, deploys the application, and verifies it's healthy.
+
+### Quick Start (azd)
+
+```bash
+# Install azd (if not already installed)
+curl -fsSL https://aka.ms/install-azd.sh | bash
+
+# Authenticate
+az login
+azd auth login
+
+# Create environment and deploy
+azd env new demo
+azd env set AZURE_LOCATION centralus
+azd up
+```
+
+After `azd up` completes (~20–40 min on first deploy, mostly APIM provisioning), the app URL is
+printed to the console. Open it in a browser to see the demo.
+
+### Common azd Commands
+
+| Command | Description |
+|---------|------------|
+| `azd up` | Provision infrastructure + deploy app (full lifecycle) |
+| `azd deploy` | Redeploy app code only (no infrastructure changes) |
+| `azd down` | Tear down all Azure resources |
+| `azd env list` | List all environments |
+| `azd env select <name>` | Switch between environments |
+
+> 📖 **For the complete deployment runbook** (prerequisites, manual steps, troubleshooting),
+> see [`docs/TESTING.md`](docs/TESTING.md).
+
+### Manual Deployment
+
+Manual deployment via `az deployment group create` and `az webapp up` is still supported.
+See the [manual phases in TESTING.md](docs/TESTING.md#manual-deployment-phases-reference) for
+step-by-step instructions.
+
+### Database Migrations
+
+Database schema management is fully automated:
+
+- **Migrations run automatically** at app startup (`src/api/db/migrate.js`) and during `azd`
+  provisioning (via `infra/scripts/run-migrations.js`)
+- **Migration files** live in `db/migrations/` as numbered `.sql` files (e.g., `001-initial-schema.sql`)
+- **Tracking** — Applied migrations are recorded in the `_migrations` table to prevent re-application
+- **GO batch separators** in SQL files are handled automatically by the Node.js runner
+- **Seed data** in `db/seed/demo-data.sql` is applied conditionally (only when the `tenants` table
+  is empty), both at app startup and during `azd` provisioning
 
 ### 1. Authenticate with Azure
 
@@ -371,10 +436,11 @@ az keyvault secret show \
 ```bash
 cd db
 
-# Connect to Azure SQL and run migrations
-sqlcmd -S <server>.database.windows.net -U <admin-user> -P <password> -d medrequest -i migrations/001-initial-schema.sql
+# Migrations run automatically at app startup. To run manually:
+cd src/api && npm install && cd ../..
+node infra/scripts/run-migrations.js
 
-# (Alternatively, use a Node.js migration tool if configured)
+# (Alternatively, the app runs migrations on startup via src/api/db/migrate.js)
 ```
 
 ### 6. Deploy API to App Service
@@ -656,4 +722,4 @@ For questions or issues:
 **Created:** 2025-07-14  
 **POC Status:** In Development  
 **Architecture Lead:** Rusty  
-**Last Updated:** 2025-07-14
+**Last Updated:** 2026-05-14

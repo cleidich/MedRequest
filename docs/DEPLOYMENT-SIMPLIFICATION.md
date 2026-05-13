@@ -1,7 +1,19 @@
 # MedRequest — Deployment Simplification Proposal
 
-> **Author:** Rusty (Lead/Architect) · **Date:** 2026-05-13 · **Status:** Proposal  
+> **Author:** Rusty (Lead/Architect) · **Date:** 2026-05-13 · **Status:** ✅ Implemented  
 > **Audience:** Chris Leidich (PM/Architect)
+>
+> **Implementation Note (2026-05-14):** This proposal has been fully implemented. The recommended
+> approach (Option A: `azd` + Option C: Node.js startup migrations) is now in production. Key
+> deliverables:
+> - `azure.yaml` — azd service definition with lifecycle hooks
+> - `src/api/db/migrate.js` — Node.js migration runner (replaces sqlcmd)
+> - `src/api/db/seed.js` — conditional demo data seeder
+> - `infra/scripts/postprovision.sh` — automated post-infra setup
+> - `infra/scripts/postdeploy.sh` — startup command fix + health check
+> - `infra/scripts/preprovision.sh` — soft-delete pre-flight checks
+>
+> See [`docs/TESTING.md`](./TESTING.md) for the updated deployment runbook with `azd up` instructions.
 
 ---
 
