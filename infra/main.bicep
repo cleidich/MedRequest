@@ -136,7 +136,7 @@ module appService 'modules/app-service.bicep' = {
     sqlDatabaseName: sql.outputs.sqlDatabaseName
     appServiceSubnetId: networking.outputs.appServiceSubnetId
     logAnalyticsWorkspaceId: monitoring.outputs.logAnalyticsId
-    tags: tags
+    tags: union(tags, { 'azd-service-name': 'api' })
   }
 }
 
