@@ -1,8 +1,9 @@
 using 'main.bicep'
 
-// Dev environment parameters for MedRequest
+// MedRequest parameters — works with both `az deployment` and `azd provision`.
+// When using azd, AZURE_ENV_NAME is set automatically from the azd environment name.
 
-param environment = 'dev'
+param environment = readEnvironmentVariable('AZURE_ENV_NAME', 'dev')
 param projectName = 'medrequest'
 param apimPublisherEmail = 'medrequest-dev@example.com'
 param appServicePlanSku = 'B1'

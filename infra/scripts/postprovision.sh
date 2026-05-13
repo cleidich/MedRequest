@@ -12,15 +12,15 @@ echo "🔧 Running post-provision setup..."
 : "${AZURE_ENV_NAME:?ERROR: AZURE_ENV_NAME is not set. Are you running via azd?}"
 
 # Resource names from Bicep outputs (set by azd from main.bicep outputs)
-SQL_SERVER="${AZURE_SQL_SERVER_NAME:?ERROR: AZURE_SQL_SERVER_NAME not set — check main.bicep outputs}"
-SQL_DB="${AZURE_SQL_DATABASE_NAME:?ERROR: AZURE_SQL_DATABASE_NAME not set — check main.bicep outputs}"
+export SQL_SERVER="${AZURE_SQL_SERVER_NAME:?ERROR: AZURE_SQL_SERVER_NAME not set — check main.bicep outputs}"
+export SQL_DATABASE="${AZURE_SQL_DATABASE_NAME:?ERROR: AZURE_SQL_DATABASE_NAME not set — check main.bicep outputs}"
 MI_NAME="${AZURE_MANAGED_IDENTITY_NAME:?ERROR: AZURE_MANAGED_IDENTITY_NAME not set — check main.bicep outputs}"
 RG="rg-medrequest-${AZURE_ENV_NAME}"
 
 echo "  Environment: ${AZURE_ENV_NAME}"
 echo "  Resource Group: ${RG}"
 echo "  SQL Server: ${SQL_SERVER}"
-echo "  Database: ${SQL_DB}"
+echo "  Database: ${SQL_DATABASE}"
 echo "  Managed Identity: ${MI_NAME}"
 
 # --- Step 1: Add deployer's IP to SQL Server firewall ---
@@ -59,7 +59,7 @@ node -e "
 const sql = require('./src/api/node_modules/mssql');
 const config = {
   server: '${SQL_SERVER}.database.windows.net',
-  database: '${SQL_DB}',
+  database: '${SQL_DATABASE}',
   authentication: {
     type: 'azure-active-directory-access-token',
     options: { token: '${ACCESS_TOKEN}' }
