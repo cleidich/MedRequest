@@ -1,0 +1,40 @@
+# azure.yaml — Azure Developer CLI (azd) configuration for MedRequest
+# Run `azd up` to provision infrastructure + deploy app in one command.
+#
+# Lifecycle: preprovision → provision (Bicep) → postprovision → prepackage → deploy → postdeploy
+# See docs/DEPLOYMENT-SIMPLIFICATION.md for the full rationale.
+
+name: medrequest
+metadata:
+  template: medrequest@1.0.0
+
+services:
+  api:
+    project: ./src/api
+    language: js
+    host: appservice
+
+hooks:
+  # Sync frontend static files into api/public before packaging
+  prepackage:
+    posix:
+      shell: sh
+      run: cp -r src/frontend/* src/api/public/
+
+  # Pre-flight checks for soft-deleted resources that block provisioning
+  preprovision:
+    posix:
+      shell: sh
+      run: ./infra/scripts/preprovision.sh
+
+  # Post-infra: SQL firewall, managed identity grant, migrations, seed
+  postprovision:
+    posix:
+      shell: sh
+      run: ./infra/scripts/postprovision.sh
+
+  # Fix startup command and verify health after code deploy
+  postdeploy:
+    posix:
+      shell: sh
+      run: ./infra/scripts/postdeploy.sh

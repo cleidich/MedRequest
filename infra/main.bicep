@@ -207,6 +207,7 @@ module appGateway 'modules/app-gateway.bicep' = {
 }
 
 // --- Outputs ---
+// Note: azd automatically maps these to env vars accessible in hook scripts.
 
 @description('Web App default hostname')
 output webAppHostname string = appService.outputs.webAppHostname
@@ -228,3 +229,17 @@ output appInsightsName string = monitoring.outputs.appInsightsName
 
 @description('Storage account name')
 output storageAccountName string = storage.outputs.storageAccountName
+
+// --- azd hook outputs (consumed by postprovision.sh and postdeploy.sh) ---
+
+@description('SQL Server name (without .database.windows.net)')
+output AZURE_SQL_SERVER_NAME string = sql.outputs.sqlServerName
+
+@description('SQL Database name')
+output AZURE_SQL_DATABASE_NAME string = sql.outputs.sqlDatabaseName
+
+@description('Managed identity name')
+output AZURE_MANAGED_IDENTITY_NAME string = identity.outputs.identityName
+
+@description('App Service name')
+output AZURE_APP_SERVICE_NAME string = appService.outputs.webAppName

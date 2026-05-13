@@ -214,3 +214,19 @@
 - **Removed:** `@secure() param apimSubscriptionKey` from `main.bicep` and `key-vault.bicep` — no longer needed as an input
 - **Docs updated:** `docs/TESTING.md` step 3a now marked as automated; removed manual CLI commands
 - **Validated:** `az bicep build --file infra/main.bicep` passes clean (only pre-existing storage warning)
+
+### 2026-07-25 — Azure Developer CLI (azd) Integration
+- **Context:** Deployment required ~15 manual steps across 5 phases. Adopted `azd` for single-command deployment via `azd up`.
+- **Created `azure.yaml`** at repo root — defines `api` service (Node.js/App Service), infrastructure path `./infra`, and 4 lifecycle hooks: prepackage (frontend sync), preprovision (soft-delete checks), postprovision (SQL setup + migrations), postdeploy (startup command + health check)
+- **Created `infra/scripts/preprovision.sh`** — checks for soft-deleted APIM and Key Vault resources matching `medrequest` pattern, warns but doesn't fail
+- **Created `infra/scripts/postprovision.sh`** — replaces all TESTING.md Phase 3 manual steps: SQL firewall rule, managed identity grant (via Node.js mssql, not sqlcmd), calls Basher's migration/seed scripts. Uses azd env vars from Bicep outputs.
+- **Created `infra/scripts/postdeploy.sh`** — sets startup command to `node server.js`, restarts app, verifies `/api/health` returns 200
+- **Updated `infra/main.bicep`** — added 4 new outputs for azd hooks: `AZURE_SQL_SERVER_NAME`, `AZURE_SQL_DATABASE_NAME`, `AZURE_MANAGED_IDENTITY_NAME`, `AZURE_APP_SERVICE_NAME`. azd maps Bicep outputs to env vars automatically.
+- **Key design decisions:**
+  - Used `set -euo pipefail` and required env var checks (`${VAR:?ERROR}`) in all scripts for defensive execution
+  - SQL identity grant uses `node -e` with mssql package (already in src/api/node_modules) instead of sqlcmd dependency
+  - Firewall rule create-or-update pattern handles both fresh and re-deploy scenarios
+  - postprovision references Basher's `run-migrations.js` and `run-seed.js` scripts (created in parallel)
+  - Resource group name constructed from `AZURE_ENV_NAME` following naming convention `rg-medrequest-{env}`
+- **Validated:** Bicep build passes clean, all shell scripts pass `bash -n` syntax check
+- **Coordination:** Basher creating `infra/scripts/run-migrations.js` and `infra/scripts/run-seed.js` in parallel
