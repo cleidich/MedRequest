@@ -24,7 +24,7 @@ router.all('/*', async (req, res) => {
     // Strip /api/proxy prefix, keep the rest
     // req.params[0] contains everything after /api/proxy/
     const targetPath = req.params[0] || '';
-    const targetUrl = `${APIM_GATEWAY_URL}/${targetPath}${req.url.includes('?') ? req.url.substring(req.url.indexOf('?')) : ''}`;
+    const targetUrl = `${APIM_GATEWAY_URL}/api/${targetPath}${req.url.includes('?') ? req.url.substring(req.url.indexOf('?')) : ''}`;
 
     // Forward auth headers from the original request
     const headers = {
