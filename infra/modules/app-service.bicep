@@ -130,8 +130,8 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
           value: '600'
         }
       ]
-      keyVaultReferenceIdentity: managedIdentityId
     }
+    keyVaultReferenceIdentity: managedIdentityId
   }
 }
 
