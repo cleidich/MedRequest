@@ -120,3 +120,15 @@
 - **Pattern note:** Frontend query keys must exactly match the backend allowlist in `routes/debug.js`. When adding new explorer queries, always verify the key string matches both sides.
 - **Reminder:** Express serves static files from `src/api/public/` — any frontend change in `src/frontend/` must be copied to the corresponding path under `src/api/public/` for production. Consider a build step or symlink to avoid this drift.
 - **Verified:** Deployed to Azure, confirmed RLS correctly filters cross-tenant query to show only the authenticated tenant's data (Mercy General Hospital, 3 requests).
+
+### 2026-05-13 — Node.js Migration Runner & Seed Scripts
+- **Purpose:** Eliminated `sqlcmd` dependency — all DB migrations and seeding now run via Node.js using the existing `mssql` package
+- **Files created:**
+  - `src/api/db/migrate.js` — Migration runner with `_migrations` tracking table, GO batch splitting, idempotent re-runs
+  - `src/api/db/seed.js` — Conditional seeder (skips if tenants table non-empty), GO batch splitting
+  - `infra/scripts/run-migrations.js` — Standalone hook script using AAD token auth (`az account get-access-token`)
+  - `infra/scripts/run-seed.js` — Standalone hook script, same AAD pattern
+- **server.js integration:** Startup sequence is now: `getPool()` → `runMigrations(pool)` → `runSeed(pool)` → `app.listen()`. Errors are caught and logged but don't prevent the server from starting (health endpoint stays available).
+- **Key technical detail:** Azure SQL requires `CREATE FUNCTION` and `CREATE SECURITY POLICY` in separate batches. The `splitBatches()` helper splits on `GO` lines (regex: `/^\s*GO\s*$/im`) before executing each batch individually via `pool.request().query()`.
+- **Standalone scripts pattern:** Hook scripts in `infra/scripts/` resolve `mssql` from `src/api/node_modules/` and import migrate/seed modules via `path.resolve()`. They accept both `SQL_SERVER`/`SQL_DATABASE` and `DB_SERVER`/`DB_NAME` env var names.
+- **Cross-team:** Livingston can replace `sqlcmd` calls in azd hooks with `node infra/scripts/run-migrations.js` and `node infra/scripts/run-seed.js`
