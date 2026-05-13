@@ -121,6 +121,14 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
           name: 'APIM_SUBSCRIPTION_KEY'
           value: '@Microsoft.KeyVault(SecretUri=https://${keyVaultName}.vault.azure.net/secrets/APIM-SUBSCRIPTION-KEY/)'
         }
+        {
+          name: 'SCM_DO_BUILD_DURING_DEPLOYMENT'
+          value: 'false'
+        }
+        {
+          name: 'WEBSITES_CONTAINER_START_TIME_LIMIT'
+          value: '600'
+        }
       ]
       keyVaultReferenceIdentity: managedIdentityId
     }

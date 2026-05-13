@@ -10,12 +10,12 @@ echo "🚀 Running post-deploy verification..."
 APP_NAME="${AZURE_APP_SERVICE_NAME:?ERROR: AZURE_APP_SERVICE_NAME not set — check main.bicep outputs}"
 RG="${AZURE_RESOURCE_GROUP:?ERROR: AZURE_RESOURCE_GROUP not set — are you running via azd?}"
 
-# --- Step 1: Set startup command ---
-echo "  Setting startup command to 'node server.js'..."
+# --- Step 1: Set startup command (npm install at boot for deps) ---
+echo "  Setting startup command to 'npm install --production && node server.js'..."
 az webapp config set \
   --name "$APP_NAME" \
   --resource-group "$RG" \
-  --startup-file "node server.js" \
+  --startup-file "npm install --production && node server.js" \
   --output none
 echo "  ✅ Startup command set"
 
@@ -27,8 +27,8 @@ az webapp restart \
   --output none
 
 # --- Step 3: Wait for app to come up ---
-echo "  Waiting for app to start (30s)..."
-sleep 30
+echo "  Waiting for app to start (60s — includes npm install at boot)..."
+sleep 60
 
 # --- Step 4: Health check ---
 APP_URL="https://${APP_NAME}.azurewebsites.net"
