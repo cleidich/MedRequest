@@ -119,3 +119,37 @@
 - **Document structure:** Prerequisites → Pre-deploy checks → Bicep deploy → Post-infra setup (ordered) → App deploy with gotchas → Verification checklist → Troubleshooting → Cleanup → CI/CD appendix
 - **Bicep parameter table:** Added complete reference with all 8 parameters, defaults, and notes
 - **File:** `docs/TESTING.md` — now ~450 lines, fully self-contained
+
+### 2026-05-13 — Multi-Tenant Architecture Documentation Created
+- **Goal:** Create comprehensive documentation explaining MedRequest's multi-tenant architecture for developers and architects
+- **Document:** `docs/MULTI-TENANT-ARCHITECTURE.md` — ~500-line reference covering RLS, SESSION_CONTEXT, and Azure SQL patterns
+- **Research:** Used Microsoft Learn tools to gather authoritative sources on:
+  - Azure SQL Row-Level Security (RLS) with FILTER and BLOCK predicates
+  - SESSION_CONTEXT and sp_set_session_context for per-request tenant scoping
+  - Multi-tenant SaaS patterns (database-per-tenant, elastic pools, sharding)
+  - Managed identity authentication for Azure SQL
+- **Content structure:**
+  1. **Introduction:** Multi-tenancy concepts and demo scope
+  2. **Architecture Overview:** Request flow diagram (auth → SESSION_CONTEXT → RLS → filtered data)
+  3. **Azure SQL Multi-Tenant Patterns:** Comparison table — standalone, database-per-tenant, RLS single DB, sharding — with scale/cost/complexity trade-offs
+  4. **How RLS Works:** Deep dive on security predicate functions, FILTER vs BLOCK predicates, actual schema code from `db/migrations/001-initial-schema.sql`
+  5. **SESSION_CONTEXT:** Explains per-request tenant scoping, connection pooling safety, code walkthrough from `queries.js`
+  6. **Application Code Walkthrough:** Layer-by-layer analysis (auth middleware, tenant context middleware, query layer, service layer) with code snippets
+  7. **Proving It Works:** SQL Explorer feature and `cross_tenant_proof` query demonstrating RLS transparency
+  8. **Connection & Authentication:** Managed identity setup, node-mssql package, connection pooling strategy
+  9. **Scaling Considerations:** When to graduate from RLS to elastic pools or sharding, migration paths, performance optimization (indexing)
+  10. **Resources & Links:** 15+ Microsoft Learn documentation links for RLS, SESSION_CONTEXT, multi-tenant patterns, managed identity
+- **Key code highlights:**
+  - `dbo.fn_tenant_filter` predicate function checking SESSION_CONTEXT
+  - `setTenantContext(request, tenantId)` called before every query
+  - Security policies on users/requests tables with FILTER and BLOCK predicates
+  - SQL Explorer `/api/debug/explore` endpoint demonstrating RLS filtering on queries with no WHERE clause
+- **Learning outcomes documented:**
+  - RLS provides defense-in-depth — filters data even if developer forgets WHERE clause
+  - BLOCK predicates prevent cross-tenant writes, which WHERE clauses can't do
+  - SESSION_CONTEXT is connection-scoped, not transaction-scoped — requires per-request reset with connection pooling
+  - Indexing `tenant_id` columns is critical for RLS performance (predicate adds implicit WHERE)
+  - Migration path from RLS → elastic pools → sharding doesn't require rewriting application code
+- **Audience:** Developers wanting to understand multi-tenancy patterns, architects evaluating RLS vs other approaches, stakeholders understanding the "learn by example" value of the demo
+- **File location:** `/home/cleidich/repos/patient-comm-app/docs/MULTI-TENANT-ARCHITECTURE.md`
+- **Demo value:** Positions MedRequest as a reference implementation for Azure SQL multi-tenancy — shows "how easily an app can scale to multi-tenancy" with minimal code changes

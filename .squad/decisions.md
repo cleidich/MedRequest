@@ -523,3 +523,199 @@ Frontend expects `GET /api/config` to return:
 - All meaningful changes require team consensus
 - Document architectural decisions here
 - Keep history focused on work, decisions focused on direction
+
+---
+
+## Decision: Multi-Tenant Architecture Documentation Pattern
+
+**Date:** 2026-05-13  
+**Agent:** Rusty (Lead/Architect)  
+**Status:** ✅ Completed  
+**Scope:** Documentation strategy for multi-tenant patterns
+
+### Context
+
+MedRequest demonstrates Azure SQL Row-Level Security (RLS) for multi-tenant isolation. We needed comprehensive documentation that:
+1. Explains the architecture to developers and architects
+2. Positions the demo as a reference implementation
+3. Compares RLS to other Azure SQL multi-tenant patterns
+4. Provides migration paths for scaling
+
+### Decision
+
+**Created `docs/MULTI-TENANT-ARCHITECTURE.md`** — a 798-line reference document covering:
+
+- **Learn by example:** Code-first explanations with actual repo snippets
+- **Comparative analysis:** RLS vs database-per-tenant vs sharding (with scale/cost/complexity table)
+- **Migration paths:** How to graduate from RLS → elastic pools → sharding without rewriting code
+- **Microsoft Learn links:** 15+ authoritative sources for further reading
+
+### Key Design Choices
+
+1. **Structure: Problem → Solution → Scaling**
+   - Start with "what is multi-tenancy, why it matters"
+   - Show RLS implementation with real code
+   - End with "when to graduate to other patterns"
+
+2. **Code Snippets from Actual Repo**
+   - Security predicate function from `db/migrations/001-initial-schema.sql`
+   - `setTenantContext()` from `src/api/db/queries.js`
+   - Middleware flow from `auth.js` → `tenantContext.js` → queries
+   - SQL Explorer `/api/debug/explore` demonstrating RLS transparency
+
+3. **Comparison Table for Patterns**
+   - Standalone DB per tenant: Low scale, highest cost, highest isolation
+   - Database per tenant + elastic pools: High scale, medium cost, medium complexity
+   - Single DB with RLS (MedRequest): Medium scale, lowest cost, medium complexity
+   - Sharded multi-tenant DBs: Unlimited scale, lowest cost per tenant, high complexity
+
+4. **Proving It Works: SQL Explorer Section**
+   - Highlights `cross_tenant_proof` query: JOINs requests to tenants
+   - Expected without RLS: All tenants visible
+   - Actual with RLS: Only authenticated tenant appears
+   - Visual proof of database-level isolation
+
+### Impact
+
+- **Developers:** Understand RLS setup, SESSION_CONTEXT pattern, connection pooling safety
+- **Architects:** Compare patterns, see migration paths, understand trade-offs
+- **Stakeholders:** See demo is not just a toy — it's a scalable SaaS pattern
+
+### Next Steps
+
+1. **Linus:** Consider adding link to `MULTI-TENANT-ARCHITECTURE.md` from SQL Explorer UI
+2. **Basher:** Review `@read_only` removal discussion in doc
+3. **Livingston:** No action required — infra patterns align with documented approach
+
+---
+
+## Decision: APIM Server-Side Proxy + Role Normalization
+
+**Date:** 2026-05-13  
+**Author:** Basher  
+**Status:** Implemented
+
+### Context
+
+- Frontend was sending `X-User-Role: casemanager` (no underscore) but backend expected `case_manager`
+- CORS issues when frontend makes direct calls to APIM gateway from browser
+- Need same-origin proxy to eliminate CORS preflight complexity
+
+### Decision
+
+#### 1. Role Normalization
+Added `ROLE_ALIASES` mapping in `src/api/middleware/auth.js`:
+- `casemanager` → `case_manager`
+- Normalization happens before validation
+- Downstream code always sees canonical `case_manager`
+- Both forms accepted for backward compatibility
+
+#### 2. APIM Server-Side Proxy
+Created `src/api/routes/proxy.js`:
+- Route: `ALL /api/proxy/*` — catch-all for all HTTP methods
+- Strips `/proxy` prefix, forwards to `APIM_GATEWAY_URL`
+- Passes through auth headers (`X-Tenant-Id`, `X-User-Id`, `X-User-Role`)
+- Adds `Ocp-Apim-Subscription-Key` header from env var
+- Uses Node.js built-in `fetch` (Node 22) — no new dependencies
+- Returns 503 if APIM not configured, 502 if gateway unreachable
+
+### Consequences
+
+- **Frontend:** Can send either `casemanager` or `case_manager` role
+- **CORS:** Eliminated by same-origin proxy pattern
+- **Local dev:** Gracefully degrades when APIM env vars not set
+- **Dependencies:** No new npm packages required
+
+### Cross-Team Impact
+
+- **Linus:** Route API calls to `/api/proxy/*` when APIM enabled
+- **Rusty:** APIM receives standard auth headers
+- **Livingston:** APIM env vars already wired via Key Vault references
+
+---
+
+## Decision: Bicep IaC Synced with Live Configuration
+
+**ID:** `bicep-sync-001`  
+**Author:** Livingston  
+**Date:** 2026-07-25  
+**Status:** Implemented  
+**Scope:** Infrastructure
+
+### Decision
+
+Synced Bicep templates with manually-configured APIM API, Key Vault secrets, and App Service Key Vault references so that a fresh `az deployment group create` from IaC reproduces what's live.
+
+### Key Changes
+
+1. APIM API definition with all 11 operations and rate-limiting/CORS/header-passthrough policies
+2. Key Vault secrets for APIM gateway URL and subscription key
+3. App Service Key Vault reference app settings with `keyVaultReferenceIdentity`
+4. Broke circular module dependency by computing deterministic resource names from `baseName`
+
+### Impact
+
+- Fresh deployment now reproduces live APIM gateway, Key Vault secrets, and App Service config
+- APIM subscription key is a `@secure()` param with empty default
+- `APIM_GATEWAY_URL` and `APIM_SUBSCRIPTION_KEY` env vars are now IaC-managed via Key Vault references
+
+---
+
+## Decision: Automate APIM Subscription Key Retrieval via Bicep
+
+**Author:** Livingston (Infra/DevOps)  
+**Date:** 2026-07-25  
+**Status:** Implemented
+
+### Context
+
+After every Bicep deployment, there was a manual post-deploy step:
+1. Retrieve the APIM built-in subscription key via `az apim subscription list`
+2. Store it in Key Vault via `az keyvault secret set`
+
+This was error-prone and broke fully automated deployments.
+
+### Decision
+
+Bicep now auto-retrieves the APIM subscription key using `listSecrets()` on the built-in `master` subscription and writes it directly to Key Vault — no manual step, no deployment parameter.
+
+### Implementation
+
+- `main.bicep`: Uses `existing` resource reference, calls `listSecrets().primaryKey`, creates `APIM-SUBSCRIPTION-KEY` secret in Key Vault
+- `key-vault.bicep`: No longer creates the APIM key secret
+- `main.bicep`: Removed `@secure() param apimSubscriptionKey` — no longer an input
+
+### Impact
+
+- **CI/CD:** `deploy.yml` no longer needs to pass `apimSubscriptionKey` or run post-deploy CLI commands
+- **Security:** Key never leaves ARM
+- **Team:** No changes needed to app code
+
+---
+
+## Decision: Fresh Deploy Findings (2026-05-13)
+
+**Author:** Livingston (Infra/DevOps)
+
+### Key Findings
+
+#### 1. App Deployment Requires Custom Startup Command
+- **Issue:** `az webapp up` doesn't reliably install node_modules via Oryx/SCM build
+- **Decision:** Use custom startup command `npm install --production && node server.js`
+- **Impact:** Adds ~30s to cold start. Must re-set after each deploy.
+- **Recommendation:** CI/CD pipeline should always set `--startup-file` after deployment
+
+#### 2. APIM Gateway URL Must Include /api Suffix
+- **Issue:** Bicep stores path without `/api` but proxy needs it
+- **Decision:** Updated Key Vault secret to `https://apim-medrequest-demo.azure-api.net/medrequest/api`
+- **Impact:** Bicep `key-vault.bicep` module default may need updating
+
+#### 3. No sqlcmd in Environment — Use Raw Tedious
+- **Issue:** `mssql` npm package breaks CREATE FUNCTION DDL
+- **Decision:** Use raw `tedious` driver's `execSqlBatch()` for DDL operations
+- **Impact:** Basher should be aware for future migration scripts
+
+#### 4. Deployer Needs Key Vault Secrets Officer Role
+- **Issue:** Bicep grants KV access to managed identity but not to human deployer
+- **Decision:** Must manually grant deployer `Key Vault Secrets Officer` after infra deploy
+- **Recommendation:** Add this to Bicep as a parameter-driven role assignment

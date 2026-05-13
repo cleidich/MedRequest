@@ -113,3 +113,10 @@
 - **Error handling:** Graceful degradation when APIM not configured (local dev), clear error messages for gateway unreachable vs not configured.
 - **Pattern note:** Proxy handles its own auth forwarding — doesn't rely on Express auth middleware because it's a transparent passthrough. Auth validation happens at APIM.
 - **Cross-team:** Linus can now route frontend API calls to `/api/proxy/*` when APIM is enabled (from `/api/config` response), eliminating browser CORS preflight issues.
+
+### 2026-05-13 — Cross-Tenant Proof Query Key Fix
+- **Bug:** Frontend explorer sent `cross_tenant` as the query key, but the backend debug endpoint (`routes/debug.js`) expects `cross_tenant_proof`. This caused a 400 error on the "Cross-Tenant Proof" button.
+- **Fix:** Changed `key: 'cross_tenant'` to `key: 'cross_tenant_proof'` in both `src/frontend/js/views/explorer.js` and `src/api/public/js/views/explorer.js` (the Express static copy).
+- **Pattern note:** Frontend query keys must exactly match the backend allowlist in `routes/debug.js`. When adding new explorer queries, always verify the key string matches both sides.
+- **Reminder:** Express serves static files from `src/api/public/` — any frontend change in `src/frontend/` must be copied to the corresponding path under `src/api/public/` for production. Consider a build step or symlink to avoid this drift.
+- **Verified:** Deployed to Azure, confirmed RLS correctly filters cross-tenant query to show only the authenticated tenant's data (Mercy General Hospital, 3 requests).

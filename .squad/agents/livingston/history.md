@@ -155,3 +155,62 @@
 - **Pattern established:** All secrets (APIM keys, gateway URLs) stored in Key Vault, referenced via App Service app settings using Key Vault reference syntax
 - **Key learning:** When App Service uses user-assigned managed identity, explicitly set `keyVaultReferenceIdentity` in app settings — otherwise references fail silently
 - **Handoff:** Pattern documented in orchestration log and decisions.md (decision `keyvault-refs-001`). All future secret handling should follow this model.
+
+### 2026-07-25 — Bicep Synced with Live APIM, Key Vault, and App Service Config
+- **Context:** APIM API, Key Vault secrets, and App Service Key Vault references were configured manually via CLI but missing from Bicep — fresh IaC deploy wouldn't reproduce the live state
+- **APIM (`infra/modules/apim.bicep`):**
+  - Added `medrequest-api` API resource with path `medrequest`, HTTPS only, backend pointing to App Service
+  - Added all 11 operations matching live config: health, ready, list/get/create/update requests, integration endpoints, debug explorer
+  - Added API-level policy: rate limiting (100 calls/60s), CORS (all origins), auth header passthrough (X-Tenant-Id, X-User-Id, X-User-Role), set-backend-service to named backend
+- **Key Vault (`infra/modules/key-vault.bicep`):**
+  - Added `APIM-GATEWAY-URL` secret (composed from APIM gateway URL + `/medrequest` path)
+  - Added `APIM-SUBSCRIPTION-KEY` secret with `@secure()` param (empty default — user provides at deploy time or post-deploy)
+  - New params: `apimGatewayUrl`, `apimSubscriptionKey`
+- **App Service (`infra/modules/app-service.bicep`):**
+  - Added `APIM_GATEWAY_URL` and `APIM_SUBSCRIPTION_KEY` app settings as Key Vault references
+  - Added `keyVaultReferenceIdentity` pointing to the user-assigned managed identity (required for Key Vault refs with user-assigned identity)
+  - New param: `keyVaultName`
+- **main.bicep:**
+  - Added `apimSubscriptionKey` secure param
+  - Computed `keyVaultName` and `apimGatewayUrl` as vars from `baseName` to avoid circular dependency (APIM→App Service→Key Vault→APIM)
+  - Wired new params to key-vault and app-service modules
+- **Circular dependency gotcha:** APIM needs App Service hostname, Key Vault needs APIM gateway URL, App Service needs Key Vault name — broke the cycle by computing deterministic resource names from `baseName` instead of cross-module output references
+- **Validated:** `az bicep build --file infra/main.bicep` passes clean (only pre-existing storage warning)
+
+### 2026-05-13 — Fresh Azure Deployment from Scratch
+- **Context:** Chris deleted resource group after laptop shutdown mid-deploy. Full clean-slate redeploy.
+- **Pre-deploy cleanup:** Purged soft-deleted APIM (`apim-medrequest-demo`) and Key Vault (`kv-medrequest-demo`) — both were in soft-delete from prior RG deletion. APIM purge took ~2 min, Key Vault purge took ~10 min.
+- **Bicep deployment:** All 10 modules deployed successfully in ~15 min. No Bicep changes needed this time — prior fixes from 2026-05-12 all held.
+- **APIM subscription key:** `az apim subscription` CLI not available — used `az rest` with ARM REST API (`listSecrets` on `/subscriptions/master`) to retrieve built-in key.
+- **Key Vault RBAC:** Had to manually grant current user `Key Vault Secrets Officer` role — Bicep only grants `Key Vault Secrets User` to the managed identity, not to the deployer. RBAC propagation takes ~15s.
+- **Database setup gotcha:** No `sqlcmd` in environment. Used Node.js `tedious` driver directly (not `mssql` wrapper) because `mssql`'s `.query()` and `.batch()` methods both interpret `@` as parameter markers, breaking `CREATE FUNCTION` statements with `@tenant_id` parameters. With raw tedious `execSqlBatch()`, the SQL executes correctly.
+- **Database name:** Bicep creates DB as `medrequest` (not `sqldb-medrequest-demo`). Must use correct name in connection strings.
+- **App deployment critical issue:** `az webapp up` creates zip that excludes or doesn't properly install `node_modules`. Three approaches failed:
+  1. Default `az webapp up` — express module not found
+  2. `SCM_DO_BUILD_DURING_DEPLOYMENT=true` with Oryx — build reports success but npm install doesn't run
+  3. `ENABLE_ORYX_BUILD=true` — same result
+- **Solution:** Set custom startup command `npm install --production && node server.js` — this runs npm install on every cold start. Works but adds ~30s to startup time.
+- **Startup command reset:** `az webapp up` resets `appCommandLine` to `node server.js`. After any `az webapp up`, must re-set the custom startup command.
+- **Key Vault references:** Require `keyVaultReferenceIdentity` set to user-assigned managed identity resource ID. Without it, KV references return literal `@Microsoft.KeyVault(...)` strings. Must also grant MI `Key Vault Secrets User` role separately (Bicep handles this but RBAC propagation may delay).
+- **APIM gateway URL:** Stored as `https://apim-medrequest-demo.azure-api.net/medrequest/api` (with `/api` suffix) so proxy routes correctly. Previous Bicep default was `/medrequest` without `/api`.
+- **Verified working:**
+  - Health: `GET /api/health` → 200 ✅
+  - Config: APIM enabled, KV references resolved ✅
+  - Direct API: 3 Mercy General requests with RLS isolation ✅
+  - APIM Proxy Health: 200 via gateway ✅
+  - APIM Proxy Requests: Data flows through APIM ✅
+  - Behind the Scenes Explorer: SQL introspection working ✅
+  - Frontend: HTTP 200 ✅
+- **App URL:** https://app-medrequest-demo.azurewebsites.net
+- **Cold start:** ~2-3 min after stop/start due to npm install in startup command
+- **Cleanup:** Removed temp SQL firewall rule after DB setup
+
+### 2026-07-25 — Automated APIM Subscription Key Retrieval in Bicep
+- **Context:** Manual post-deploy step (retrieve APIM key via CLI, store in Key Vault) eliminated — Bicep now handles it end-to-end
+- **Approach:** Use `existing` resource reference to APIM's built-in `master` subscription in `main.bicep`, call `listSecrets().primaryKey`, write directly to Key Vault secret
+- **Key Bicep pattern:** Can't use module output names with `existing` resources (BCP307) — must use deterministic name strings (e.g., `'apim-${baseName}'`) instead of `apim.outputs.apimServiceName`
+- **Dependency chain fix:** Moved `APIM-SUBSCRIPTION-KEY` secret out of `key-vault.bicep` module into `main.bicep` as a standalone resource — this avoids circular dependency (Key Vault → APIM) while preserving APIM → App Service → Key Vault ordering
+- **Security:** Key never exposed as a module output or deployment parameter — stays in-memory via `listSecrets()` and goes directly to Key Vault
+- **Removed:** `@secure() param apimSubscriptionKey` from `main.bicep` and `key-vault.bicep` — no longer needed as an input
+- **Docs updated:** `docs/TESTING.md` step 3a now marked as automated; removed manual CLI commands
+- **Validated:** `az bicep build --file infra/main.bicep` passes clean (only pre-existing storage warning)
