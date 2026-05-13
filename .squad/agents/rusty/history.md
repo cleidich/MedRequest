@@ -153,3 +153,27 @@
 - **Audience:** Developers wanting to understand multi-tenancy patterns, architects evaluating RLS vs other approaches, stakeholders understanding the "learn by example" value of the demo
 - **File location:** `/home/cleidich/repos/patient-comm-app/docs/MULTI-TENANT-ARCHITECTURE.md`
 - **Demo value:** Positions MedRequest as a reference implementation for Azure SQL multi-tenancy — shows "how easily an app can scale to multi-tenancy" with minimal code changes
+
+### 2026-05-13 — Deployment Simplification Research & Proposal
+- **Trigger:** Chris reported 70+ min debugging deployments; current flow has ~15 manual steps across 5 phases
+- **Research conducted:**
+  - Azure Developer CLI (`azd`) lifecycle, hooks (preprovision/postprovision/predeploy/postdeploy), azure.yaml schema
+  - Bicep `Microsoft.Resources/deploymentScripts` for in-template script execution
+  - Node.js startup migration patterns (Flyway/Liquibase equivalent for Node.js + mssql)
+  - Azure Functions as migration runners (rejected — over-engineered for POC)
+  - GitHub Actions deployment workflows, dev containers, Makefile task runners
+  - Azure Samples repos: `todo-nodejs-mongo` (primary reference), `msdocs-app-service-sqldb-dotnetcore` (SQL+azd), `dotnet-app-service-sqldb-infra`, `functions-quickstart-dotnet-azd-sql`, `nodejs-app-service-cosmos-redis-infra`, `laravel-tasks`, `nlp-sql-in-a-box`
+- **Key findings:**
+  1. `azd up` = single command for provision + deploy + hooks, preserves existing Bicep modules
+  2. `azd deploy` uses zip deploy (not `az webapp up`) — avoids Oryx hangs and startup command resets
+  3. `postprovision` hooks can replace all Phase 3 manual steps (firewall, identity grants, migrations, seeding)
+  4. `prepackage` hooks can automate frontend→public sync
+  5. Node.js startup migrations eliminate sqlcmd dependency entirely — use `mssql` package with AAD tokens
+  6. Bicep deploymentScripts work but have poor DX for debugging (transient ACI containers)
+- **Recommendation:** `azd` + Node.js startup migrations (Options A+C)
+  - Phase 1 (Basher, 3–5h): Node.js migration runner with tracking table
+  - Phase 2 (Livingston, 5–8h): azure.yaml, hook scripts, azd integration
+  - Phase 3 (Livingston, 2–3h): `azd pipeline config` for GitHub Actions CI/CD
+  - Phase 4 (Livingston, 1–2h): Dev container for Codespaces
+- **Document:** `docs/DEPLOYMENT-SIMPLIFICATION.md` — ~350-line proposal with code snippets, pros/cons, Azure Samples references
+- **Decision:** `rusty-deploy-simplification` written to decisions inbox, pending Chris approval
