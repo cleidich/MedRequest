@@ -28,3 +28,16 @@ if [ -n "$DELETED_KV" ]; then
 fi
 
 echo "✅ Pre-provision checks complete."
+
+# --- Auto-set SQL admin to the current deployer ---
+if [ -z "${AZURE_SQL_ADMIN_OBJECT_ID:-}" ]; then
+  echo ""
+  echo "🔑 Setting SQL admin to current Azure CLI user..."
+  DEPLOYER_OID=$(az ad signed-in-user show --query id -o tsv 2>/dev/null || true)
+  if [ -n "$DEPLOYER_OID" ]; then
+    azd env set AZURE_SQL_ADMIN_OBJECT_ID "$DEPLOYER_OID"
+    echo "  ✅ AZURE_SQL_ADMIN_OBJECT_ID set to ${DEPLOYER_OID}"
+  else
+    echo "  ⚠️  Could not determine deployer OID — SQL admin will default to managed identity"
+  fi
+fi

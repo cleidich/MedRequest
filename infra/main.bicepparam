@@ -9,5 +9,6 @@ param apimPublisherEmail = 'medrequest-dev@example.com'
 param appServicePlanSku = 'B1'
 param wafMode = 'Detection'
 
-// SQL AAD admin — leave empty to use the managed identity as admin
-param sqlAadAdminObjectId = ''
+// SQL AAD admin — set via azd env to the deployer's AAD Object ID.
+// If empty, falls back to the managed identity (which can't grant other users access).
+param sqlAadAdminObjectId = readEnvironmentVariable('AZURE_SQL_ADMIN_OBJECT_ID', '')
