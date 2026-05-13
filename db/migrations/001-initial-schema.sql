@@ -60,6 +60,8 @@ CREATE INDEX IX_requests_status        ON requests (status);
 CREATE INDEX IX_requests_created_at    ON requests (created_at);
 CREATE INDEX IX_requests_tenant_status ON requests (tenant_id, status, created_at);
 
+GO
+
 -- =============================================================================
 -- ROW-LEVEL SECURITY (RLS)
 -- =============================================================================
