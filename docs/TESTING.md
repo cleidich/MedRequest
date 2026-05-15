@@ -242,12 +242,12 @@ az deployment group create \
 
 | Resource | Provisioning Time |
 |----------|-------------------|
-| APIM (Consumption tier) | **15–30 minutes** |
+| APIM (Basic v2 tier) | **~5 minutes** |
 | App Gateway (WAF Standard_v2) | **5–15 minutes** |
 | Everything else | 2–5 minutes |
 
 > The deployment CLI will appear to hang while APIM and App Gateway provision. This is normal.
-> Total wall-clock time: **20–40 minutes** for a fresh deployment.
+> Total wall-clock time: **10–25 minutes** for a fresh deployment.
 
 ### Capture Deployment Outputs
 
@@ -757,19 +757,19 @@ az network application-gateway delete --resource-group rg-medrequest-demo --name
 | App Gateway Standard_v2 | 0-2 instances | ~$146 |
 | App Service | B1 | ~$13 |
 | Azure SQL | Basic (5 DTU) | ~$5 |
-| APIM | Consumption | ~$1-5 |
+| APIM | Basic v2 | ~$150 |
 | Functions | Consumption | ~$0-2 |
 | Storage | Standard LRS | ~$1-2 |
 | Log Analytics | Pay-as-you-go | ~$2-5 |
 | Key Vault | Standard | ~$0 |
-| **Total** | | **~$170-180** |
+| **Total** | | **~$320-330** |
 
 ---
 
 ## Known Limitations (POC)
 
 1. **Header-based auth is demo-only** — no token validation, easily spoofed. Production: OAuth/MSAL + JWT.
-2. **APIM Consumption cold start** — first request after idle: 10-20s. Upgrade to Developer tier if needed.
+2. **APIM Basic v2** — dedicated compute (~$150/month), no cold starts or provisioning race conditions. Includes SLA.
 3. **App Gateway provisioning** — 5-15 minutes, ~$146/mo. Required for WAF.
 4. **No CI/CD secrets pre-configured** — see Appendix for GitHub Actions OIDC setup.
 5. **No custom domain** — uses `*.azurewebsites.net`. SSL provided by Azure.

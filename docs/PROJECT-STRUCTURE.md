@@ -125,13 +125,13 @@ Infrastructure uses Bicep modules composed by `main.bicep`. Each Azure service g
 All Bicep modules target free/Basic/Standard SKUs:
 - App Service: **F1/B1**
 - Azure SQL: **Basic** (5 DTU)
-- APIM: **Consumption** tier
+- APIM: **Basic v2** tier (~$150/month, dedicated compute)
 - App Gateway: **Standard_v2** (WAF-capable, but cheapest WAF SKU)
 - Functions: **Consumption** plan
 
 ### 9. Private Networking (Scoped)
 
-A VNet with subnets for App Gateway, App Service (VNet integration), and SQL (private endpoint) is included. APIM in Consumption tier runs outside the VNet but communicates with the backend via App Gateway. This keeps costs low while demonstrating the pattern.
+A VNet with subnets for App Gateway, App Service (VNet integration), and SQL (private endpoint) is included. APIM in Basic v2 tier runs outside the VNet but communicates with the backend via App Gateway. Basic v2 provides dedicated compute with no cold starts.
 
 ### 10. Observability by Default
 

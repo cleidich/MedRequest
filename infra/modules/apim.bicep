@@ -1,9 +1,9 @@
-// apim.bicep — Azure API Management (Consumption tier)
+// apim.bicep — Azure API Management (Basic v2 tier)
 // Frontend API gateway for patient-facing app and future integrations
 //
-// ⚠️ COST NOTE: Consumption tier runs outside VNet (no VNet injection).
+// ⚠️ COST NOTE: Basic v2 is dedicated compute (~$150/month). No cold starts,
+// no race conditions on provisioning, and includes SLA.
 // Traffic flows: Internet → App Gateway → APIM → App Service.
-// Consumption APIM has no monthly base cost — pay per call only.
 
 @description('Azure region for deployment')
 param location string
@@ -32,13 +32,13 @@ param logAnalyticsWorkspaceId string
 @description('Tags to apply to all resources')
 param tags object = {}
 
-resource apim 'Microsoft.ApiManagement/service@2023-09-01-preview' = {
+resource apim 'Microsoft.ApiManagement/service@2024-05-01' = {
   name: 'apim-${baseName}'
   location: location
   tags: tags
   sku: {
-    name: 'Consumption'
-    capacity: 0
+    name: 'Basicv2'
+    capacity: 1
   }
   properties: {
     publisherEmail: publisherEmail
@@ -47,7 +47,7 @@ resource apim 'Microsoft.ApiManagement/service@2023-09-01-preview' = {
 }
 
 // App Insights logger for APIM
-resource apimLogger 'Microsoft.ApiManagement/service/loggers@2023-09-01-preview' = {
+resource apimLogger 'Microsoft.ApiManagement/service/loggers@2024-05-01' = {
   parent: apim
   name: 'appinsights-logger'
   properties: {
@@ -60,7 +60,7 @@ resource apimLogger 'Microsoft.ApiManagement/service/loggers@2023-09-01-preview'
 }
 
 // Backend pointing to the App Service
-resource apimBackend 'Microsoft.ApiManagement/service/backends@2023-09-01-preview' = {
+resource apimBackend 'Microsoft.ApiManagement/service/backends@2024-05-01' = {
   parent: apim
   name: 'medrequest-backend'
   properties: {
@@ -96,7 +96,7 @@ resource diagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' 
 
 // --- API definition: MedRequest API ---
 
-resource api 'Microsoft.ApiManagement/service/apis@2023-09-01-preview' = {
+resource api 'Microsoft.ApiManagement/service/apis@2024-05-01' = {
   parent: apim
   name: 'medrequest-api'
   properties: {
@@ -115,7 +115,7 @@ resource api 'Microsoft.ApiManagement/service/apis@2023-09-01-preview' = {
 }
 
 // API-level policy: rate limit, CORS, header passthrough, backend service
-resource apiPolicy 'Microsoft.ApiManagement/service/apis/policies@2023-09-01-preview' = {
+resource apiPolicy 'Microsoft.ApiManagement/service/apis/policies@2024-05-01' = {
   parent: api
   name: 'policy'
   properties: {
@@ -170,7 +170,7 @@ resource apiPolicy 'Microsoft.ApiManagement/service/apis/policies@2023-09-01-pre
 
 // --- API Operations (11 total, matching live configuration) ---
 
-resource opGetHealth 'Microsoft.ApiManagement/service/apis/operations@2023-09-01-preview' = {
+resource opGetHealth 'Microsoft.ApiManagement/service/apis/operations@2024-05-01' = {
   parent: api
   name: 'getHealth'
   properties: {
@@ -181,7 +181,7 @@ resource opGetHealth 'Microsoft.ApiManagement/service/apis/operations@2023-09-01
   }
 }
 
-resource opGetReady 'Microsoft.ApiManagement/service/apis/operations@2023-09-01-preview' = {
+resource opGetReady 'Microsoft.ApiManagement/service/apis/operations@2024-05-01' = {
   parent: api
   name: 'getReady'
   properties: {
@@ -192,7 +192,7 @@ resource opGetReady 'Microsoft.ApiManagement/service/apis/operations@2023-09-01-
   }
 }
 
-resource opListRequests 'Microsoft.ApiManagement/service/apis/operations@2023-09-01-preview' = {
+resource opListRequests 'Microsoft.ApiManagement/service/apis/operations@2024-05-01' = {
   parent: api
   name: 'listRequests'
   properties: {
@@ -203,7 +203,7 @@ resource opListRequests 'Microsoft.ApiManagement/service/apis/operations@2023-09
   }
 }
 
-resource opGetRequest 'Microsoft.ApiManagement/service/apis/operations@2023-09-01-preview' = {
+resource opGetRequest 'Microsoft.ApiManagement/service/apis/operations@2024-05-01' = {
   parent: api
   name: 'getRequest'
   properties: {
@@ -221,7 +221,7 @@ resource opGetRequest 'Microsoft.ApiManagement/service/apis/operations@2023-09-0
   }
 }
 
-resource opCreateRequest 'Microsoft.ApiManagement/service/apis/operations@2023-09-01-preview' = {
+resource opCreateRequest 'Microsoft.ApiManagement/service/apis/operations@2024-05-01' = {
   parent: api
   name: 'createRequest'
   properties: {
@@ -232,7 +232,7 @@ resource opCreateRequest 'Microsoft.ApiManagement/service/apis/operations@2023-0
   }
 }
 
-resource opUpdateRequestStatus 'Microsoft.ApiManagement/service/apis/operations@2023-09-01-preview' = {
+resource opUpdateRequestStatus 'Microsoft.ApiManagement/service/apis/operations@2024-05-01' = {
   parent: api
   name: 'updateRequestStatus'
   properties: {
@@ -250,7 +250,7 @@ resource opUpdateRequestStatus 'Microsoft.ApiManagement/service/apis/operations@
   }
 }
 
-resource opGetIntegrationRequests 'Microsoft.ApiManagement/service/apis/operations@2023-09-01-preview' = {
+resource opGetIntegrationRequests 'Microsoft.ApiManagement/service/apis/operations@2024-05-01' = {
   parent: api
   name: 'getIntegrationRequests'
   properties: {
@@ -261,7 +261,7 @@ resource opGetIntegrationRequests 'Microsoft.ApiManagement/service/apis/operatio
   }
 }
 
-resource opForwardToEmr 'Microsoft.ApiManagement/service/apis/operations@2023-09-01-preview' = {
+resource opForwardToEmr 'Microsoft.ApiManagement/service/apis/operations@2024-05-01' = {
   parent: api
   name: 'forwardToEmr'
   properties: {
@@ -272,7 +272,7 @@ resource opForwardToEmr 'Microsoft.ApiManagement/service/apis/operations@2023-09
   }
 }
 
-resource opForwardToBusinessOffice 'Microsoft.ApiManagement/service/apis/operations@2023-09-01-preview' = {
+resource opForwardToBusinessOffice 'Microsoft.ApiManagement/service/apis/operations@2024-05-01' = {
   parent: api
   name: 'forwardToBusinessOffice'
   properties: {
@@ -283,7 +283,7 @@ resource opForwardToBusinessOffice 'Microsoft.ApiManagement/service/apis/operati
   }
 }
 
-resource opSendNotification 'Microsoft.ApiManagement/service/apis/operations@2023-09-01-preview' = {
+resource opSendNotification 'Microsoft.ApiManagement/service/apis/operations@2024-05-01' = {
   parent: api
   name: 'sendNotification'
   properties: {
@@ -294,7 +294,7 @@ resource opSendNotification 'Microsoft.ApiManagement/service/apis/operations@202
   }
 }
 
-resource opDebugExplore 'Microsoft.ApiManagement/service/apis/operations@2023-09-01-preview' = {
+resource opDebugExplore 'Microsoft.ApiManagement/service/apis/operations@2024-05-01' = {
   parent: api
   name: 'debugExplore'
   properties: {

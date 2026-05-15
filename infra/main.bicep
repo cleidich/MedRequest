@@ -154,7 +154,7 @@ module functions 'modules/functions.bicep' = {
   }
 }
 
-// 9. APIM — API Management (Consumption tier)
+// 9. APIM — API Management (Basic v2 tier)
 module apim 'modules/apim.bicep' = {
   name: 'apim-deploy'
   params: {
@@ -172,11 +172,11 @@ module apim 'modules/apim.bicep' = {
 // 10. APIM subscription key → Key Vault (auto-retrieved, no manual step needed)
 // References the built-in all-access subscription after APIM deploys, then stores the
 // primary key in Key Vault so App Service can read it via Key Vault reference.
-resource apimInstance 'Microsoft.ApiManagement/service@2023-09-01-preview' existing = {
+resource apimInstance 'Microsoft.ApiManagement/service@2024-05-01' existing = {
   name: 'apim-${baseName}'
 }
 
-resource apimBuiltInSubscription 'Microsoft.ApiManagement/service/subscriptions@2023-09-01-preview' existing = {
+resource apimBuiltInSubscription 'Microsoft.ApiManagement/service/subscriptions@2024-05-01' existing = {
   name: 'master'
   parent: apimInstance
 }

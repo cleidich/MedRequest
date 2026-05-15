@@ -168,7 +168,7 @@ echo "✅ Post-provision complete"
 **Cons:**
 - Adds `azd` as a required tool (but it's a single `curl | bash` install)
 - Learning curve for hook lifecycle (but well-documented)
-- APIM Consumption provisioning is still 15–30 min (azd can't speed this up)
+- APIM Basic v2 provisioning is ~5 min (much faster than Consumption's 15–30 min)
 - `azd deploy` uses `az webapp deploy` (zip deploy) not `az webapp up` — different mechanism, but actually more reliable
 
 **Effort:** Medium (8–12 hours)
