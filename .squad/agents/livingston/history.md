@@ -230,3 +230,46 @@
   - Resource group name constructed from `AZURE_ENV_NAME` following naming convention `rg-medrequest-{env}`
 - **Validated:** Bicep build passes clean, all shell scripts pass `bash -n` syntax check
 - **Coordination:** Basher creating `infra/scripts/run-migrations.js` and `infra/scripts/run-seed.js` in parallel
+
+### 2026-07-25 — APIM Consumption Tier Race Condition Diagnosis
+- **Trigger:** `azd up` failed on `apim-medrequest-demo/medrequest-api/policy` with `PreconditionFailedException`
+- **Root cause:** Known Azure APIM Consumption tier race condition. The APIM service reports `provisioningState: "Succeeded"` but internal services (gateway, policy engine) are not ready for child resource deployment (APIs, policies).
+- **Live state confirmed:**
+  - APIM instance: ✅ provisioned, healthy (`provisioningState: "Succeeded"`, created 2026-05-15T12:16:08Z)
+  - API definition (`medrequest-api`): ✅ deployed
+  - API policy: ❌ NOT deployed — `PoliciesConfiguration not found`
+  - Key Vault secret (`APIM-SUBSCRIPTION-KEY`): unable to verify (RBAC — deployer doesn't have Key Vault secrets reader, by design)
+- **Bicep structure review:** Dependencies are correct — `apiPolicy` depends on `api` (parent) and `apimBackend` (explicit dependsOn). The issue is NOT a missing dependency; it's an Azure platform timing problem specific to Consumption tier.
+- **Impact:** Partial deployment — APIM service and API exist but have no policy. The `apimKeySecret` in `main.bicep` (which calls `listSecrets()` on the master subscription) may or may not have succeeded — depends on ARM execution ordering.
+- **Fix:** Re-run `azd provision` — APIM is warmed up by now and the policy/secret deployment will succeed on retry.
+- **Structural mitigation not recommended for POC:** Could add a `Microsoft.Resources/deploymentScripts` resource to poll APIM readiness before API/policy deployment, but this adds complexity (requires storage account for script execution, managed identity permissions, extra ~2min deploy time). For a production system: yes. For this demo: re-run is sufficient.
+- **Pattern:** This is the second occurrence of this exact issue. If it keeps happening, we should consider splitting APIM into two deployment phases or adding the deploymentScript wait.
+
+### 2025-07-16 — APIM Tier Change: Consumption → Basic v2
+- **Change:** Switched APIM from Consumption to Basic v2 (`Basicv2`, capacity 1)
+- **Motivation:** Consumption tier had a known race condition — ARM reports deployment success before gateway is ready, causing `PreconditionFailedException` on child resource deployments (APIs, policies). This happened at least twice.
+- **API version bump:** All APIM resources updated from `2023-09-01-preview` to `2024-05-01` (v2 tiers fully supported in this version)
+- **Cost impact:** ~$150/month (up from ~$1-5). Total monthly estimate now ~$320-330.
+- **Benefits:** No cold starts, no provisioning race conditions, includes SLA, ~5 min provisioning (vs 15-30 min)
+- **Files changed:** `infra/modules/apim.bicep`, `infra/main.bicep`, `docs/TESTING.md`, `docs/PROJECT-STRUCTURE.md`, `docs/DEPLOYMENT-SIMPLIFICATION.md`
+- **Policy compatibility:** `rate-limit` and all existing policies work on Basic v2 (all dedicated tiers support them)
+- **No networking changes:** Basic v2 still runs outside VNet (same as Consumption for this project)
+
+### 2026-05-15 — APIM Basic v2 Tier Migration Completed + Scribe Log
+- **Status:** ✅ Completed — APIM tier migration committed as 9c270b0
+- **Task owner:** Livingston (Infra/DevOps)
+- **Related decisions:** Decision `apim-basicv2-tier-001` (dated 2025-07-16, now status Implemented)
+- **Commit hash:** 9c270b0
+- **Files modified:**
+  - `infra/modules/apim.bicep` — SKU changed to `Basicv2`, API version to `2024-05-01`
+  - `infra/main.bicep` — Updated APIM module reference
+  - `docs/TESTING.md` — Documented single `azd up` path, no re-run workaround needed
+  - `docs/MULTI_TENANT.md` — Updated cost/reliability notes
+  - `README.md` — Updated infrastructure cost estimate (~$320-330/month)
+- **Scribe tasks completed:**
+  - ✅ Orchestration log: `.squad/orchestration-log/2026-05-15T12:44:00Z-livingston.md`
+  - ✅ Session log: `.squad/log/2026-05-15T12-44-apim-basicv2.md`
+  - ✅ Decision inbox merged: All 4 inbox files merged into `.squad/decisions/decisions.md`, inbox dir cleaned
+  - ✅ Cross-agent coordination tracked in this history
+  - ✅ Squad commit with scribe logs pending
+
