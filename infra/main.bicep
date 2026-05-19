@@ -170,24 +170,14 @@ module apim 'modules/apim.bicep' = {
 }
 
 // 10. APIM subscription key → Key Vault (auto-retrieved, no manual step needed)
-// References the built-in all-access subscription after APIM deploys, then stores the
-// primary key in Key Vault so App Service can read it via Key Vault reference.
-resource apimInstance 'Microsoft.ApiManagement/service@2024-05-01' existing = {
-  name: 'apim-${baseName}'
-}
-
-resource apimBuiltInSubscription 'Microsoft.ApiManagement/service/subscriptions@2024-05-01' existing = {
-  name: 'master'
-  parent: apimInstance
-}
-
+// The key is now output from the APIM module (which owns the resource lifecycle),
+// eliminating the race condition where `existing` references resolve before APIM exists.
 resource apimKeySecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
   name: '${keyVaultName}/APIM-SUBSCRIPTION-KEY'
   properties: {
-    value: apimBuiltInSubscription.listSecrets().primaryKey
+    value: apim.outputs.apimSubscriptionKey
   }
   dependsOn: [
-    apim
     keyVault
   ]
 }

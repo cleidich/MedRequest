@@ -305,6 +305,12 @@ resource opDebugExplore 'Microsoft.ApiManagement/service/apis/operations@2024-05
   }
 }
 
+// Built-in "master" subscription — safe to reference here because `apim` is created above
+resource builtInSubscription 'Microsoft.ApiManagement/service/subscriptions@2024-05-01' existing = {
+  name: 'master'
+  parent: apim
+}
+
 @description('Resource ID of the APIM instance')
 output apimId string = apim.id
 
@@ -316,3 +322,7 @@ output apimServiceName string = apim.name
 
 @description('Gateway URL of the APIM instance')
 output apimGatewayUrl string = apim.properties.gatewayUrl
+
+@description('APIM built-in subscription primary key')
+@secure()
+output apimSubscriptionKey string = builtInSubscription.listSecrets().primaryKey
