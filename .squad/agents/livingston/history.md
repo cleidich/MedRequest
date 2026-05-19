@@ -273,3 +273,9 @@
   - ✅ Cross-agent coordination tracked in this history
   - ✅ Squad commit with scribe logs pending
 
+### 2025-07-15 — Fix APIM `existing` Race Condition on Fresh Deploy
+- **Problem:** `azd up` on a fresh environment fails with `ResourceNotFound` for APIM because `existing` resource references in `main.bicep` resolve before the APIM module finishes provisioning
+- **Root cause:** Bicep `existing` + `listSecrets()` in the parent template that also creates the resource via a module — ARM may resolve the reference before the module completes even with explicit `dependsOn`
+- **Fix:** Moved the `master` subscription key retrieval INTO `infra/modules/apim.bicep` (where the service is created), output it as `@secure()`, and reference `apim.outputs.apimSubscriptionKey` in `main.bicep` — implicit module-output dependency guarantees ordering
+- **Pattern to remember:** Never use `existing` in a parent template to reference a resource created by a child module + call `listSecrets()`/`list*()` on it. Always do that inside the module that owns the lifecycle.
+
