@@ -48,7 +48,7 @@ MedRequest follows a three-tier architecture deployed on Azure:
          │                                       │
     ┌────▼─────────┐                  ┌────────▼────────┐
     │   APIM        │                  │  App Service    │
-    │  (Consumption)│                  │  (Frontend+API) │
+    │  (Basic v2)│                  │  (Frontend+API) │
     └────┬─────────┘                  └────────┬────────┘
          │                                    │
          └────────────────┬───────────────────┘
@@ -88,7 +88,7 @@ The MedRequest POC uses the following Azure services:
 
 ### Security & Identity
 - **Application Gateway with WAF** (Standard_v2) — DDoS protection, WAF rules, SSL termination
-- **API Management** (Consumption tier) — API versioning, rate limiting, developer portal
+- **API Management** (Basic v2 tier) — API versioning, rate limiting, developer portal
 - **Key Vault** (Standard) — secrets, certificates, connection strings
 - **Managed Identities** — passwordless authentication for all service-to-service communication
 
@@ -653,12 +653,12 @@ This POC intentionally uses **low-cost Azure SKUs** to minimize spend while demo
 | App Service Plan | B1 | $12 | 1 core, 1.75 GB RAM; can handle light traffic |
 | Azure SQL Database | Basic (5 DTU) | $5–$10 | 2 GB storage, row-level security included |
 | Azure Functions | Consumption | $0–$5 | Pay per execution; free tier includes 1M calls/month |
-| API Management | Consumption | $0–$15 | Pay per request; no minimum |
+| API Management | Basic v2 | ~$150 | Dedicated compute; no cold starts, includes SLA |
 | Application Gateway | Standard_v2 | ~$146 | Fixed hourly cost; cheapest WAF-capable SKU |
 | Key Vault | Standard | $0.60/month | Per-transaction pricing (~$2–5 total) |
 | Storage Account | Standard-LRS | $0–$2 | Minimal usage for logs/assets |
 | Log Analytics | Pay-as-you-go | $0–$10 | ~1 GB/day ingestion |
-| **Total** | | **~$180–$210/month** | App Gateway is the primary cost driver |
+| **Total** | | **~$320–$330/month** | APIM Basic v2 is the primary cost driver alongside App Gateway |
 
 ### Cost Optimization Tips
 
@@ -672,7 +672,7 @@ This POC intentionally uses **low-cost Azure SKUs** to minimize spend while demo
 
 - App Service: B1 → S1/S2 (standard tier) → P1V2 (premium) with auto-scaling
 - SQL: Basic → Standard (S0/S1) with more DTUs
-- APIM: Consumption → Standard (self-hosted or gateway)
+- APIM: Basic v2 → Standard v2 (higher capacity, more policies)
 
 ---
 
