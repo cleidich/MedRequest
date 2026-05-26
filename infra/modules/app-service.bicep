@@ -122,6 +122,10 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
           value: '@Microsoft.KeyVault(SecretUri=https://${keyVaultName}.vault.azure.net/secrets/APIM-SUBSCRIPTION-KEY/)'
         }
         {
+          name: 'GATEWAY_SECRET'
+          value: '@Microsoft.KeyVault(SecretUri=https://${keyVaultName}.vault.azure.net/secrets/GATEWAY-SECRET/)'
+        }
+        {
           name: 'SCM_DO_BUILD_DURING_DEPLOYMENT'
           value: 'false'
         }

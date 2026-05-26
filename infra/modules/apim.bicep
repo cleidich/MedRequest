@@ -32,6 +32,10 @@ param logAnalyticsWorkspaceId string
 @description('Tags to apply to all resources')
 param tags object = {}
 
+@secure()
+@description('Gateway secret for APIM-to-backend validation')
+param gatewaySecret string
+
 resource apim 'Microsoft.ApiManagement/service@2024-05-01' = {
   name: 'apim-${baseName}'
   location: location
@@ -70,6 +74,17 @@ resource apimBackend 'Microsoft.ApiManagement/service/backends@2024-05-01' = {
       validateCertificateChain: true
       validateCertificateName: true
     }
+  }
+}
+
+// Named value for gateway secret
+resource gatewaySecretNamedValue 'Microsoft.ApiManagement/service/namedValues@2024-05-01' = {
+  parent: apim
+  name: 'gateway-secret'
+  properties: {
+    displayName: 'gateway-secret'
+    value: gatewaySecret
+    secret: true
   }
 }
 
@@ -150,6 +165,9 @@ resource apiPolicy 'Microsoft.ApiManagement/service/apis/policies@2024-05-01' = 
     <set-header name="X-User-Role" exists-action="override">
       <value>@(context.Request.Headers.GetValueOrDefault("X-User-Role",""))</value>
     </set-header>
+    <set-header name="X-Gateway-Key" exists-action="override">
+      <value>{{gateway-secret}}</value>
+    </set-header>
     <set-backend-service backend-id="medrequest-backend" />
   </inbound>
   <backend>
@@ -165,6 +183,7 @@ resource apiPolicy 'Microsoft.ApiManagement/service/apis/policies@2024-05-01' = 
   }
   dependsOn: [
     apimBackend
+    gatewaySecretNamedValue
   ]
 }
 

@@ -165,6 +165,7 @@ module apim 'modules/apim.bicep' = {
     appInsightsInstrumentationKey: monitoring.outputs.appInsightsInstrumentationKey
     backendHostname: appService.outputs.webAppHostname
     logAnalyticsWorkspaceId: monitoring.outputs.logAnalyticsId
+    gatewaySecret: uniqueString(resourceGroup().id, 'gateway-secret')
     tags: tags
   }
 }

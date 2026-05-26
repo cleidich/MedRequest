@@ -635,6 +635,19 @@ The `src/api/middleware/auth.js` middleware:
 
 This ensures that queries in the database automatically filter results by tenant — even if an attacker somehow bypasses application logic, RLS prevents data leakage.
 
+### Gateway Validation
+
+API routes (`/api/requests`, `/api/integration`, `/api/debug`) are additionally protected by **APIM gateway validation**:
+
+- APIM injects a secret `X-Gateway-Key` header into every request it forwards to the backend
+- The Express middleware (`src/api/middleware/gatewayAuth.js`) validates this header before allowing access
+- Requests that bypass APIM (hitting the App Service directly) will receive a `403 Forbidden` response
+- The shared secret is stored in Azure Key Vault and read by both APIM (via Named Value) and App Service (via Key Vault reference)
+
+**Local development:** When `GATEWAY_SECRET` is not set, the middleware fails open — all requests are allowed. This enables local development without APIM.
+
+**Defense-in-depth:** This is a shared-secret approach suitable for demo/POC that prevents casual bypass of the gateway. In production, use VNet integration with private endpoints or mutual TLS for true network isolation.
+
 ### Future: OAuth 2.0 / Microsoft Entra ID
 
 For production, replace header-based auth with:

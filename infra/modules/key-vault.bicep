@@ -63,6 +63,15 @@ resource secretApimGatewayUrl 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
   }
 }
 
+// Gateway secret for APIM-to-backend authentication
+resource secretGatewaySecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
+  parent: keyVault
+  name: 'GATEWAY-SECRET'
+  properties: {
+    value: uniqueString(resourceGroup().id, 'gateway-secret')
+  }
+}
+
 // Diagnostic settings
 resource diagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
   name: 'diag-${keyVault.name}'

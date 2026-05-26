@@ -536,3 +536,56 @@ This matches the existing pattern (`A0000...` → Mercy, `B0000...` → St. Clai
 | `harbor-patient` | Harbor Medical | Henry Park | patient | `C0000000-0000-0000-0000-000000000003` | `30000000-0000-0000-0000-000000000001` |
 | `harbor-concierge` | Harbor Medical | Isabel Chen | concierge | `C0000000-0000-0000-0000-000000000003` | `30000000-0000-0000-0000-000000000002` |
 | `harbor-casemanager` | Harbor Medical | Jack O'Brien | case_manager | `C0000000-0000-0000-0000-000000000003` | `30000000-0000-0000-0000-000000000003` |
+
+---
+
+## Gateway Validation (APIM → App Service)
+
+**Added:** 2026-05-26  
+**Status:** Implemented
+
+### Problem
+
+Both APIM (`*.azure-api.net`) and App Service (`*.azurewebsites.net`) are publicly accessible. A user who discovers the App Service URL can bypass APIM entirely — skipping rate limiting, CORS enforcement, and any future auth policies.
+
+### Solution
+
+APIM injects a shared secret header (`X-Gateway-Key`) into every request forwarded to the backend. The Express middleware validates this header on protected API routes.
+
+**Flow:**
+```
+Browser → APIM (injects X-Gateway-Key) → App Service (validates key) → responds
+Browser → App Service directly (no X-Gateway-Key) → 403 Forbidden
+```
+
+**Infrastructure wiring:**
+1. Key Vault stores `GATEWAY-SECRET` (deterministic value from `uniqueString(resourceGroup().id, 'gateway-secret')`)
+2. APIM reads it via Named Value (`{{gateway-secret}}`) and injects as `X-Gateway-Key` header
+3. App Service reads it via Key Vault reference (`GATEWAY_SECRET` env var)
+4. Express middleware (`src/api/middleware/gatewayAuth.js`) compares header to env var
+
+**What's protected:**
+- `/api/requests` — patient request CRUD
+- `/api/integration` — EMR/comms pull API
+- `/api/debug` — debug endpoints
+
+**What's NOT protected (by design):**
+- `/api/health`, `/api/ready` — health probes (App Service needs these)
+- `/api/config` — client configuration (no sensitive data)
+- `/api/proxy` — APIM proxy routes (internal)
+- Static files (`/`, CSS, JS) — frontend assets served by Express
+
+**Local development:** The middleware fails open when `GATEWAY_SECRET` is unset, so local `npm start` works without APIM.
+
+### Security Notes
+
+- **Not cryptographically strong** — if someone intercepts HTTPS traffic between APIM and App Service, they could extract the secret. However, this traffic is TLS-encrypted in transit.
+- **Not a replacement for real auth** — this prevents casual bypass, not sophisticated attacks.
+- **Production alternative:** Use VNet integration with private endpoints to make App Service unreachable from the internet entirely.
+
+### Demo Talking Points
+
+When presenting to customers:
+1. "Even though both APIM and App Service have public URLs, the API refuses requests that didn't come through the gateway"
+2. "This is a defense-in-depth pattern — the gateway enforces rate limits and policies, and the app validates the request origin"
+3. "In production, you'd use private endpoints to eliminate public access entirely, but this shared-secret approach demonstrates the pattern at minimal cost"

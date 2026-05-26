@@ -6,6 +6,7 @@ const cors    = require('cors');
 const helmet  = require('helmet');
 const config  = require('./config');
 const auth    = require('./middleware/auth');
+const gatewayAuth    = require('./middleware/gatewayAuth');
 const tenantContext  = require('./middleware/tenantContext');
 const errorHandler   = require('./middleware/errorHandler');
 const healthRoutes   = require('./routes/health');
@@ -41,9 +42,9 @@ app.use('/api/proxy', proxyRoutes);
 // ---------------------------------------------------------------------------
 // Authenticated routes
 // ---------------------------------------------------------------------------
-app.use('/api/requests',    auth, tenantContext, requestRoutes);
-app.use('/api/integration', auth, tenantContext, integrationRoutes);
-app.use('/api/debug',       auth, tenantContext, debugRoutes);
+app.use('/api/requests',    gatewayAuth, auth, tenantContext, requestRoutes);
+app.use('/api/integration', gatewayAuth, auth, tenantContext, integrationRoutes);
+app.use('/api/debug',       gatewayAuth, auth, tenantContext, debugRoutes);
 
 // ---------------------------------------------------------------------------
 // Static frontend files (served from public/ directory)
