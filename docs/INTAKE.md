@@ -5,7 +5,7 @@
 <!-- A brief description of the application: what it does, who it's for, and the core problem it solves. -->
 "MedRequest" is an application used by patients in inpatient hospital stays, to send feedback and request concierge-type services from the hospital, using their smartphone for maximum convenience and safety. It allows patients to request non-urgent comfort items, service items, or staff member assistance.
 
-**Note**: This application is a demo. We'll want to demonstrate a simple web frontend with backend, and demonstrate things like Azure App Gateway + APIM, but additional features like EMR integration do not need to be operational.
+**Note**: This application is a demo. We'll want to demonstrate a simple web frontend with backend, and demonstrate things like APIM gateway security, but additional features like EMR integration do not need to be operational.
 
 ## Key Features
 
@@ -14,7 +14,7 @@
 - Web-based front end with responsive design, optimized for phone and tablet.
 - Secure database backend to log requests
 - Robust frontend APIs for both patient requets submissions (from front-end) and for querying the system for new requests, (i.e., a pull architecture, to move requests into an EMR or communications system)
-- Front-end security with WAF + Azure API Management
+- Front-end security with Azure API Management
 - Supports multi-tenant operations via sharding capabilities of Azure SQL Database.
 
 ## User Roles & Personas

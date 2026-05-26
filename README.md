@@ -28,7 +28,7 @@
 - **Responsive Web Frontend** — Mobile and tablet optimized interface built with vanilla JavaScript
 - **Secure Backend API** — Node.js/Express with multi-tenant support via Row-Level Security (RLS)
 - **Pull-Based Integration** — APIs for external systems (EMR, communications platforms) to query and process requests
-- **Azure Security Patterns** — API Gateway with WAF, APIM, managed identities, Key Vault, private networking
+- **Azure Security Patterns** — APIM gateway with gateway validation, managed identities, Key Vault, private networking
 - **Multi-Tenant Operations** — Azure SQL with row-level security for tenant isolation and data segregation
 - **Full Observability** — Application Insights and Log Analytics for metrics, logs, and diagnostics
 
@@ -40,25 +40,26 @@ MedRequest follows a three-tier architecture deployed on Azure:
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│                   Azure App Gateway (WAF)                    │
-│                      Public entry point                      │
+│                        Internet                              │
 └────────────────────────────┬─────────────────────────────────┘
                              │
-         ┌───────────────────┴───────────────────┐
-         │                                       │
-    ┌────▼─────────┐                  ┌────────▼────────┐
-    │   APIM        │                  │  App Service    │
-    │  (Basic v2)│                  │  (Frontend+API) │
-    └────┬─────────┘                  └────────┬────────┘
-         │                                    │
-         └────────────────┬───────────────────┘
-                          │
-        ┌─────────────────┴──────────────────┐
-        │                                    │
-    ┌───▼────────────┐              ┌──────▼──────────┐
-    │  Azure SQL     │              │ Azure Functions │
-    │  (Multi-tenant)│              │  (Outbound)     │
-    └────────────────┘              └─────────────────┘
+                    ┌────────▼────────┐
+                    │   APIM          │
+                    │  (Basic v2)     │
+                    │ Public endpoint │
+                    └────────┬────────┘
+                             │
+                    ┌────────▼────────┐
+                    │  App Service    │
+                    │  (Frontend+API) │
+                    └────┬────────┬───┘
+                         │        │
+        ┌────────────────┘        └──────────────────┐
+        │                                            │
+┌───────▼────────┐                          ┌───────▼─────────┐
+│  Azure SQL     │                          │ Azure Functions │
+│  (Multi-tenant)│                          │  (Outbound)     │
+└────────────────┘                          └─────────────────┘
 ```
 
 ### Technology Stack
@@ -69,7 +70,7 @@ MedRequest follows a three-tier architecture deployed on Azure:
 | **Backend API** | Node.js 18+, Express.js |
 | **Database** | Azure SQL Database with Row-Level Security (RLS) for multi-tenancy |
 | **Integration Functions** | Azure Functions (Node.js) with Consumption plan |
-| **Security** | Azure API Management (APIM), Application Gateway (WAF), Key Vault, Managed Identities |
+| **Security** | Azure API Management (APIM), Key Vault, Managed Identities |
 | **Observability** | Application Insights, Log Analytics Workspace |
 
 ---
@@ -87,13 +88,12 @@ The MedRequest POC uses the following Azure services:
 - **Blob Storage** (Standard-LRS) — application resources and logs
 
 ### Security & Identity
-- **Application Gateway with WAF** (Standard_v2) — DDoS protection, WAF rules, SSL termination
 - **API Management** (Basic v2 tier) — API versioning, rate limiting, developer portal
 - **Key Vault** (Standard) — secrets, certificates, connection strings
 - **Managed Identities** — passwordless authentication for all service-to-service communication
 
 ### Networking
-- **Virtual Network (VNet)** with subnets for App Gateway, App Service (VNet integration), and SQL (private endpoints)
+- **Virtual Network (VNet)** with subnets for App Service (VNet integration) and SQL (private endpoints)
 - **Network Security Groups (NSGs)** — least-privilege inbound/outbound rules
 - **Private Endpoints** — for Azure SQL and Key Vault
 
@@ -168,7 +168,6 @@ patient-comm-app/
 │   │   ├── functions.bicep
 │   │   ├── sql.bicep
 │   │   ├── apim.bicep
-│   │   ├── app-gateway.bicep
 │   │   ├── key-vault.bicep
 │   │   ├── monitoring.bicep
 │   │   ├── storage.bicep
@@ -411,7 +410,6 @@ This creates:
 - App Service Plan and Web App
 - Function App with Consumption plan
 - APIM instance (API Management)
-- Application Gateway with WAF
 - Key Vault, Storage, Monitoring resources
 - VNet with private endpoints
 
@@ -667,11 +665,10 @@ This POC intentionally uses **low-cost Azure SKUs** to minimize spend while demo
 | Azure SQL Database | Basic (5 DTU) | $5–$10 | 2 GB storage, row-level security included |
 | Azure Functions | Consumption | $0–$5 | Pay per execution; free tier includes 1M calls/month |
 | API Management | Basic v2 | ~$150 | Dedicated compute; no cold starts, includes SLA |
-| Application Gateway | Standard_v2 | ~$146 | Fixed hourly cost; cheapest WAF-capable SKU |
 | Key Vault | Standard | $0.60/month | Per-transaction pricing (~$2–5 total) |
 | Storage Account | Standard-LRS | $0–$2 | Minimal usage for logs/assets |
 | Log Analytics | Pay-as-you-go | $0–$10 | ~1 GB/day ingestion |
-| **Total** | | **~$320–$330/month** | APIM Basic v2 is the primary cost driver alongside App Gateway |
+| **Total** | | **~$175–$185/month** | APIM Basic v2 is the primary cost driver |
 
 ### Cost Optimization Tips
 
@@ -705,7 +702,6 @@ This POC intentionally uses **low-cost Azure SKUs** to minimize spend while demo
 
 - **Header-based auth is demo-only** — replace with OAuth 2.0 / MSAL for production
 - **Row-Level Security (RLS)** is enabled but should be tested thoroughly before production use
-- **Application Gateway + WAF** provides basic DDoS protection, but real-world deployments need additional hardening
 - **Secrets in Key Vault** are best-practice, but consider rotating credentials regularly
 - **Managed Identities** eliminate most secret management, but audit trail is important
 

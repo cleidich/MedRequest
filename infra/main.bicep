@@ -26,9 +26,6 @@ param apimPublisherEmail string
 @description('AAD admin object ID for SQL Server')
 param sqlAadAdminObjectId string = ''
 
-@description('WAF mode: Detection or Prevention')
-param wafMode string = 'Detection'
-
 @description('App Service Plan SKU (F1 = free, B1 = basic with VNet support)')
 param appServicePlanSku string = 'B1'
 
@@ -181,20 +178,6 @@ resource apimKeySecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
   dependsOn: [
     keyVault
   ]
-}
-
-// 11. App Gateway — WAF-enabled entry point
-module appGateway 'modules/app-gateway.bicep' = {
-  name: 'appgateway-deploy'
-  params: {
-    location: location
-    baseName: baseName
-    appGatewaySubnetId: networking.outputs.appGatewaySubnetId
-    backendFqdn: appService.outputs.webAppHostname
-    wafMode: wafMode
-    logAnalyticsWorkspaceId: monitoring.outputs.logAnalyticsId
-    tags: tags
-  }
 }
 
 // --- Outputs ---

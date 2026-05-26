@@ -95,7 +95,7 @@ azd up
 | Phase | Hook / Stage | What It Does |
 |-------|-------------|-------------|
 | **preprovision** | `infra/scripts/preprovision.sh` | Checks for soft-deleted APIM and Key Vault resources that would block provisioning |
-| **provision** | Bicep (`infra/main.bicep`) | Creates all Azure resources: App Service, SQL, APIM, Key Vault, App Gateway, VNet, monitoring (~15–30 min for APIM) |
+| **provision** | Bicep (`infra/main.bicep`) | Creates all Azure resources: App Service, SQL, APIM, Key Vault, VNet, monitoring (~5 min for APIM) |
 | **postprovision** | `infra/scripts/postprovision.sh` | Adds deployer IP to SQL firewall, grants managed identity SQL access, runs database migrations, seeds demo data |
 | **prepackage** | (inline in `azure.yaml`) | Syncs `src/frontend/*` → `src/api/public/` |
 | **deploy** | azd zip deploy | Packages and deploys `src/api` to App Service |
@@ -206,9 +206,7 @@ az group create \
 > step runs this Bicep deployment for you, and Bicep outputs are captured as azd environment
 > variables. The manual steps below are for reference or troubleshooting.
 
-This provisions ALL Azure resources: App Service, Azure SQL, Key Vault, APIM, App Gateway (WAF),
-Functions, Storage, VNet, Monitoring (App Insights + Log Analytics), and a user-assigned managed
-identity.
+This provisions ALL Azure resources: App Service, Azure SQL, Key Vault, APIM, Functions, Storage, VNet, Monitoring (App Insights + Log Analytics), and a user-assigned managed identity.
 
 ### Complete Deployment Command
 
@@ -222,7 +220,7 @@ az deployment group create \
   --parameters environment=demo location=centralus \
   --parameters apimPublisherEmail=<your-email> \
   --parameters sqlAadAdminObjectId=$YOUR_AAD_OBJECT_ID \
-  --parameters appServicePlanSku=B1 wafMode=Detection
+  --parameters appServicePlanSku=B1
 ```
 
 ### Bicep Parameter Reference
@@ -234,7 +232,6 @@ az deployment group create \
 | `projectName` | No | `medrequest` | Base name for all resources |
 | `apimPublisherEmail` | **Yes** | — | Your email for APIM notifications |
 | `sqlAadAdminObjectId` | No | Managed identity | Your AAD object ID for SQL admin |
-| `wafMode` | No | `Detection` | `Detection` or `Prevention` |
 | `appServicePlanSku` | No | `B1` | `B1` minimum for VNet integration |
 | `tags` | No | Auto-generated | `project`, `environment`, `managedBy` |
 
@@ -243,11 +240,10 @@ az deployment group create \
 | Resource | Provisioning Time |
 |----------|-------------------|
 | APIM (Basic v2 tier) | **~5 minutes** |
-| App Gateway (WAF Standard_v2) | **5–15 minutes** |
 | Everything else | 2–5 minutes |
 
-> The deployment CLI will appear to hang while APIM and App Gateway provision. This is normal.
-> Total wall-clock time: **10–25 minutes** for a fresh deployment.
+> The deployment CLI will appear to hang while APIM provisions. This is normal.
+> Total wall-clock time: **7–10 minutes** for a fresh deployment.
 
 ### Capture Deployment Outputs
 
@@ -745,16 +741,12 @@ az group exists --name rg-medrequest-demo
 ```bash
 # Stop App Service (keep resource, stop billing compute)
 az webapp stop --name app-medrequest-demo --resource-group rg-medrequest-demo
-
-# Delete App Gateway (biggest cost: ~$146/mo)
-az network application-gateway delete --resource-group rg-medrequest-demo --name appgw-medrequest-demo
 ```
 
 ### Cost Breakdown
 
 | Resource | SKU | ~USD/month |
 |----------|-----|-----------|
-| App Gateway Standard_v2 | 0-2 instances | ~$146 |
 | App Service | B1 | ~$13 |
 | Azure SQL | Basic (5 DTU) | ~$5 |
 | APIM | Basic v2 | ~$150 |
@@ -762,7 +754,7 @@ az network application-gateway delete --resource-group rg-medrequest-demo --name
 | Storage | Standard LRS | ~$1-2 |
 | Log Analytics | Pay-as-you-go | ~$2-5 |
 | Key Vault | Standard | ~$0 |
-| **Total** | | **~$320-330** |
+| **Total** | | **~$175-185** |
 
 ---
 
@@ -770,8 +762,7 @@ az network application-gateway delete --resource-group rg-medrequest-demo --name
 
 1. **Header-based auth is demo-only** — no token validation, easily spoofed. Production: OAuth/MSAL + JWT.
 2. **APIM Basic v2** — dedicated compute (~$150/month), no cold starts or provisioning race conditions. Includes SLA.
-3. **App Gateway provisioning** — 5-15 minutes, ~$146/mo. Required for WAF.
-4. **No CI/CD secrets pre-configured** — see Appendix for GitHub Actions OIDC setup.
+3. **No CI/CD secrets pre-configured** — see Appendix for GitHub Actions OIDC setup.
 5. **No custom domain** — uses `*.azurewebsites.net`. SSL provided by Azure.
 6. **B1 App Service** — no deployment slots, limited autoscale.
 7. **RLS set per-query** — `SESSION_CONTEXT` reset per query (not per connection) for pool safety. ~1ms overhead.
