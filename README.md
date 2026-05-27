@@ -32,6 +32,8 @@
 - **Multi-Tenant Operations** — Azure SQL with row-level security for tenant isolation and data segregation
 - **Full Observability** — Application Insights and Log Analytics for metrics, logs, and diagnostics
 
+> 📐 **Multi-Tenant Deep Dive:** This demo uses SQL Server `SESSION_CONTEXT` and Row-Level Security (RLS) for tenant isolation. See [`docs/MULTI-TENANT-ARCHITECTURE.md`](docs/MULTI-TENANT-ARCHITECTURE.md) for a complete walkthrough of how multi-tenancy is implemented, including schema design, middleware integration, and demo talking points.
+
 ---
 
 ## Architecture Overview
