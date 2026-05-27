@@ -723,17 +723,8 @@ Before deploying to a real hospital environment:
 
 ---
 
-## Support & Questions
+## Support & Contributions
 
-For questions or issues:
+For questions or issues, please [open an issue](https://github.com/cleidich/MedRequest/issues) in the repository.
 
-1. **Check existing issues** — https://github.com/your-org/patient-comm-app/issues
-2. **Ask in team Slack** — #medrequest-dev
-3. **Review docs** — Start with `docs/INTAKE.md` and `docs/PROJECT-STRUCTURE.md`
-
----
-
-**Created:** 2025-07-14  
-**POC Status:** In Development  
-**Architecture Lead:** Rusty  
-**Last Updated:** 2026-05-14
+Contributions are welcome via Issues and Pull Requests from forks.
