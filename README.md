@@ -11,10 +11,10 @@
 1. [Features](#features)
 2. [Architecture Overview](#architecture-overview)
 3. [Azure Infrastructure](#azure-infrastructure)
-4. [Repository Structure](#repository-structure)
-5. [Prerequisites](#prerequisites)
-6. [Local Development](#local-development)
-7. [Deployment](#deployment)
+4. [Deployment (Quick Start)](#deployment-quick-start)
+5. [Repository Structure](#repository-structure)
+6. [Prerequisites](#prerequisites)
+7. [Local Development](#local-development)
 8. [API Overview](#api-overview)
 9. [User Roles](#user-roles)
 10. [Authentication](#authentication)
@@ -103,6 +103,201 @@ The MedRequest POC uses the following Azure services:
 
 ---
 
+## Deployment (Quick Start)
+
+> **Minimal requirements for deployment:** You only need **Azure CLI** (`az`), **Azure Developer CLI** (`azd`), and an **Azure Subscription** with Owner or Contributor role. Node.js, GitHub CLI, and other local development tools listed in [Prerequisites](#prerequisites) are NOT required for deployment — `azd` handles everything in the cloud.
+
+MedRequest uses the **Azure Developer CLI (`azd`)** for streamlined deployment. A single `azd up`
+command provisions all Azure infrastructure, configures the database, runs migrations, seeds demo
+data, deploys the application, and verifies it's healthy.
+
+### Quick Start (azd)
+
+```bash
+# Install azd (if not already installed)
+curl -fsSL https://aka.ms/install-azd.sh | bash
+
+# Authenticate
+az login
+azd auth login
+
+# Create environment and deploy
+azd env new demo
+azd env set AZURE_LOCATION centralus
+azd up
+```
+
+After `azd up` completes (~20–40 min on first deploy, mostly APIM provisioning), the app URL is
+printed to the console. Open it in a browser to see the demo.
+
+### Common azd Commands
+
+| Command | Description |
+|---------|------------|
+| `azd up` | Provision infrastructure + deploy app (full lifecycle) |
+| `azd deploy` | Redeploy app code only (no infrastructure changes) |
+| `azd down` | Tear down all Azure resources |
+| `azd env list` | List all environments |
+| `azd env select <name>` | Switch between environments |
+
+> 📖 **For the complete deployment runbook** (prerequisites, manual steps, troubleshooting),
+> see [`docs/TESTING.md`](docs/TESTING.md).
+
+### Database Migrations
+
+Database schema management is fully automated:
+
+- **Migrations run automatically** at app startup (`src/api/db/migrate.js`) and during `azd`
+  provisioning (via `infra/scripts/run-migrations.js`)
+- **Migration files** live in `db/migrations/` as numbered `.sql` files (e.g., `001-initial-schema.sql`)
+- **Tracking** — Applied migrations are recorded in the `_migrations` table to prevent re-application
+- **GO batch separators** in SQL files are handled automatically by the Node.js runner
+- **Seed data** in `db/seed/demo-data.sql` is applied conditionally (only when the `tenants` table
+  is empty), both at app startup and during `azd` provisioning
+
+### Manual Deployment (Advanced)
+
+<details>
+<summary>Click to expand manual deployment steps</summary>
+
+#### 1. Authenticate with Azure
+
+```bash
+az login
+az account set --subscription "<your-subscription-id>"
+```
+
+#### 2. Create Resource Group
+
+```bash
+az group create \
+  --name rg-medrequest-dev \
+  --location eastus
+```
+
+#### 3. Deploy Infrastructure (Bicep)
+
+```bash
+cd infra
+
+# Validate template
+az deployment group validate \
+  --resource-group rg-medrequest-dev \
+  --template-file main.bicep \
+  --parameters main.bicepparam
+
+# Deploy infrastructure
+az deployment group create \
+  --resource-group rg-medrequest-dev \
+  --template-file main.bicep \
+  --parameters main.bicepparam \
+  --name medrequest-deploy
+```
+
+This creates:
+- Azure SQL Database with initial schema
+- App Service Plan and Web App
+- Function App with Consumption plan
+- APIM instance (API Management)
+- Key Vault, Storage, Monitoring resources
+- VNet with private endpoints
+
+#### 4. Retrieve Connection Strings
+
+```bash
+# Get SQL connection string from Key Vault
+az keyvault secret show \
+  --vault-name kvmedreqdev \
+  --name "sqlConnectionString" \
+  --query "value" -o tsv
+
+# Get API key from Key Vault (for testing)
+az keyvault secret show \
+  --vault-name kvmedreqdev \
+  --name "apimSubscriptionKey" \
+  --query "value" -o tsv
+```
+
+#### 5. Run Database Migrations
+
+```bash
+cd db
+
+# Migrations run automatically at app startup. To run manually:
+cd src/api && npm install && cd ../..
+node infra/scripts/run-migrations.js
+
+# (Alternatively, the app runs migrations on startup via src/api/db/migrate.js)
+```
+
+#### 6. Deploy API to App Service
+
+```bash
+cd src/api
+
+# Build the app
+npm install
+npm run build  # If applicable
+
+# Deploy via Azure CLI (App Service)
+az webapp up \
+  --resource-group rg-medrequest-dev \
+  --name app-medrequest-dev \
+  --runtime "node|18-lts" \
+  --sku B1
+
+# Set environment variables in App Service
+az webapp config appsettings set \
+  --resource-group rg-medrequest-dev \
+  --name app-medrequest-dev \
+  --settings \
+    DATABASE_URL="@Microsoft.KeyVault(VaultName=kvmedreqdev;SecretName=sqlConnectionString)" \
+    APIM_KEY="@Microsoft.KeyVault(VaultName=kvmedreqdev;SecretName=apimSubscriptionKey)"
+```
+
+#### 7. Deploy Frontend to App Service (Static Content)
+
+```bash
+cd src/frontend
+
+# App Service can serve static files from /public
+# Deploy via GitHub Actions or direct push
+az webapp deployment source config-zip \
+  --resource-group rg-medrequest-dev \
+  --name app-medrequest-dev \
+  --src frontend.zip
+```
+
+#### 8. Deploy Azure Functions
+
+```bash
+cd src/functions
+
+npm install
+
+# Deploy to Function App
+func azure functionapp publish func-medrequest-dev --build remote
+```
+
+#### 9. Verify Deployment
+
+```bash
+# Test the health endpoint
+curl https://app-medrequest-dev.azurewebsites.net/health
+
+# Create a test request
+curl -X POST https://app-medrequest-dev.azurewebsites.net/api/requests \
+  -H "Content-Type: application/json" \
+  -H "X-Tenant-Id: tenant-001" \
+  -H "X-User-Id: patient-001" \
+  -H "X-User-Role: patient" \
+  -d '{"requestType": "comfort", "description": "Extra pillow"}'
+```
+
+</details>
+
+---
+
 ## Repository Structure
 
 ```
@@ -113,7 +308,7 @@ patient-comm-app/
 │   └── api/                         # API documentation & examples
 │
 ├── src/
-│   ├── frontend/                    # 🔵 Linus (owner)
+│   ├── frontend/                    # Browser SPA (vanilla JS)
 │   │   ├── public/
 │   │   │   ├── index.html           # SPA entry point
 │   │   │   ├── favicon.ico
@@ -130,7 +325,7 @@ patient-comm-app/
 │   │   │       └── casemanager.js
 │   │   └── package.json
 │   │
-│   ├── api/                         # 🟢 Basher (owner)
+│   ├── api/                         # Node.js/Express backend
 │   │   ├── package.json
 │   │   ├── server.js                # Express entry point
 │   │   ├── middleware/
@@ -152,7 +347,7 @@ patient-comm-app/
 │   │   └── config/
 │   │       └── index.js             # Environment config (Key Vault)
 │   │
-│   └── functions/                   # 🟢 Basher (owner)
+│   └── functions/                   # Azure Functions (outbound)
 │       ├── package.json
 │       ├── host.json
 │       ├── local.settings.json      # (gitignored)
@@ -160,7 +355,7 @@ patient-comm-app/
 │           ├── index.js
 │           └── function.json
 │
-├── infra/                           # 🟠 Livingston (owner)
+├── infra/                           # Bicep IaC modules
 │   ├── main.bicep                   # Orchestrator — deploys all modules
 │   ├── main.bicepparam              # Parameter file (dev environment)
 │   ├── modules/
@@ -200,7 +395,9 @@ patient-comm-app/
 
 ## Prerequisites
 
-Before you begin, ensure you have:
+> **For deployment only** (just running `azd up`), you only need Azure CLI and Azure Developer CLI — see [Deployment (Quick Start)](#deployment-quick-start) above.
+
+The full prerequisites below are needed for **local development and testing**:
 
 - **Node.js** 18+ and npm
 - **Azure CLI** (`az` command)
@@ -311,198 +508,6 @@ docker run -e "ACCEPT_EULA=Y" -e "SA_PASSWORD=YourPassword123!" \
 # Then run migrations (handled automatically on app startup)
 cd src/api && npm install && npm start
 # Migrations run automatically via src/api/db/migrate.js when the server starts
-```
-
----
-
-## Deployment
-
-MedRequest uses the **Azure Developer CLI (`azd`)** for streamlined deployment. A single `azd up`
-command provisions all Azure infrastructure, configures the database, runs migrations, seeds demo
-data, deploys the application, and verifies it's healthy.
-
-### Quick Start (azd)
-
-```bash
-# Install azd (if not already installed)
-curl -fsSL https://aka.ms/install-azd.sh | bash
-
-# Authenticate
-az login
-azd auth login
-
-# Create environment and deploy
-azd env new demo
-azd env set AZURE_LOCATION centralus
-azd up
-```
-
-After `azd up` completes (~20–40 min on first deploy, mostly APIM provisioning), the app URL is
-printed to the console. Open it in a browser to see the demo.
-
-### Common azd Commands
-
-| Command | Description |
-|---------|------------|
-| `azd up` | Provision infrastructure + deploy app (full lifecycle) |
-| `azd deploy` | Redeploy app code only (no infrastructure changes) |
-| `azd down` | Tear down all Azure resources |
-| `azd env list` | List all environments |
-| `azd env select <name>` | Switch between environments |
-
-> 📖 **For the complete deployment runbook** (prerequisites, manual steps, troubleshooting),
-> see [`docs/TESTING.md`](docs/TESTING.md).
-
-### Manual Deployment
-
-Manual deployment via `az deployment group create` and `az webapp up` is still supported.
-See the [manual phases in TESTING.md](docs/TESTING.md#manual-deployment-phases-reference) for
-step-by-step instructions.
-
-### Database Migrations
-
-Database schema management is fully automated:
-
-- **Migrations run automatically** at app startup (`src/api/db/migrate.js`) and during `azd`
-  provisioning (via `infra/scripts/run-migrations.js`)
-- **Migration files** live in `db/migrations/` as numbered `.sql` files (e.g., `001-initial-schema.sql`)
-- **Tracking** — Applied migrations are recorded in the `_migrations` table to prevent re-application
-- **GO batch separators** in SQL files are handled automatically by the Node.js runner
-- **Seed data** in `db/seed/demo-data.sql` is applied conditionally (only when the `tenants` table
-  is empty), both at app startup and during `azd` provisioning
-
-### 1. Authenticate with Azure
-
-```bash
-az login
-az account set --subscription "<your-subscription-id>"
-```
-
-### 2. Create Resource Group
-
-```bash
-az group create \
-  --name rg-medrequest-dev \
-  --location eastus
-```
-
-### 3. Deploy Infrastructure (Bicep)
-
-```bash
-cd infra
-
-# Validate template
-az deployment group validate \
-  --resource-group rg-medrequest-dev \
-  --template-file main.bicep \
-  --parameters main.bicepparam
-
-# Deploy infrastructure
-az deployment group create \
-  --resource-group rg-medrequest-dev \
-  --template-file main.bicep \
-  --parameters main.bicepparam \
-  --name medrequest-deploy
-```
-
-This creates:
-- Azure SQL Database with initial schema
-- App Service Plan and Web App
-- Function App with Consumption plan
-- APIM instance (API Management)
-- Key Vault, Storage, Monitoring resources
-- VNet with private endpoints
-
-### 4. Retrieve Connection Strings
-
-```bash
-# Get SQL connection string from Key Vault
-az keyvault secret show \
-  --vault-name kvmedreqdev \
-  --name "sqlConnectionString" \
-  --query "value" -o tsv
-
-# Get API key from Key Vault (for testing)
-az keyvault secret show \
-  --vault-name kvmedreqdev \
-  --name "apimSubscriptionKey" \
-  --query "value" -o tsv
-```
-
-### 5. Run Database Migrations
-
-```bash
-cd db
-
-# Migrations run automatically at app startup. To run manually:
-cd src/api && npm install && cd ../..
-node infra/scripts/run-migrations.js
-
-# (Alternatively, the app runs migrations on startup via src/api/db/migrate.js)
-```
-
-### 6. Deploy API to App Service
-
-```bash
-cd src/api
-
-# Build the app
-npm install
-npm run build  # If applicable
-
-# Deploy via Azure CLI (App Service)
-az webapp up \
-  --resource-group rg-medrequest-dev \
-  --name app-medrequest-dev \
-  --runtime "node|18-lts" \
-  --sku B1
-
-# Set environment variables in App Service
-az webapp config appsettings set \
-  --resource-group rg-medrequest-dev \
-  --name app-medrequest-dev \
-  --settings \
-    DATABASE_URL="@Microsoft.KeyVault(VaultName=kvmedreqdev;SecretName=sqlConnectionString)" \
-    APIM_KEY="@Microsoft.KeyVault(VaultName=kvmedreqdev;SecretName=apimSubscriptionKey)"
-```
-
-### 7. Deploy Frontend to App Service (Static Content)
-
-```bash
-cd src/frontend
-
-# App Service can serve static files from /public
-# Deploy via GitHub Actions or direct push
-az webapp deployment source config-zip \
-  --resource-group rg-medrequest-dev \
-  --name app-medrequest-dev \
-  --src frontend.zip
-```
-
-### 8. Deploy Azure Functions
-
-```bash
-cd src/functions
-
-npm install
-
-# Deploy to Function App
-func azure functionapp publish func-medrequest-dev --build remote
-```
-
-### 9. Verify Deployment
-
-```bash
-# Test the health endpoint
-curl https://app-medrequest-dev.azurewebsites.net/health
-
-# Create a test request
-curl -X POST https://app-medrequest-dev.azurewebsites.net/api/requests \
-  -H "Content-Type: application/json" \
-  -H "X-Tenant-Id: tenant-001" \
-  -H "X-User-Id: patient-001" \
-  -H "X-User-Role: patient" \
-  -d '{"requestType": "comfort", "description": "Extra pillow"}'
 ```
 
 ---
