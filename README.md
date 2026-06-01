@@ -26,13 +26,14 @@
 ## Features
 
 - **Responsive Web Frontend** — Mobile and tablet optimized interface built with vanilla JavaScript
+- **Interactive RLS Explorer** — "Behind the Scenes" view lets presenters prove tenant isolation live by running queries across personas
 - **Secure Backend API** — Node.js/Express with multi-tenant support via Row-Level Security (RLS)
 - **Pull-Based Integration** — APIs for external systems (EMR, communications platforms) to query and process requests
 - **Azure Security Patterns** — APIM gateway with gateway validation, managed identities, Key Vault, private networking
 - **Multi-Tenant Operations** — Azure SQL with row-level security for tenant isolation and data segregation
 - **Full Observability** — Application Insights and Log Analytics for metrics, logs, and diagnostics
 
-> 📐 **Multi-Tenant Deep Dive:** This demo uses SQL Server `SESSION_CONTEXT` and Row-Level Security (RLS) for tenant isolation. See [`docs/MULTI-TENANT-ARCHITECTURE.md`](docs/MULTI-TENANT-ARCHITECTURE.md) for a complete walkthrough of how multi-tenancy is implemented, including schema design, middleware integration, and demo talking points.
+> 📐 **Multi-Tenant Deep Dive:** This demo implements the **single-database RLS pattern** — one of four Azure SQL multi-tenant strategies (alongside database-per-tenant, elastic pools, and sharding). See [`docs/MULTI-TENANT-ARCHITECTURE.md`](docs/MULTI-TENANT-ARCHITECTURE.md) for a full comparison of all patterns, implementation walkthrough, and guidance on when to choose each approach.
 
 ---
 
@@ -74,6 +75,18 @@ MedRequest follows a three-tier architecture deployed on Azure:
 | **Integration Functions** | Azure Functions (Node.js) with Consumption plan |
 | **Security** | Azure API Management (APIM), Key Vault, Managed Identities |
 | **Observability** | Application Insights, Log Analytics Workspace |
+
+### What APIM Demonstrates
+
+This POC demonstrates APIM as a sophisticated security and governance layer—far more than a reverse proxy. Key capabilities include:
+
+- **Rate limiting** — 100 calls/60s enforced via policy to prevent abuse
+- **Subscription key enforcement** — API access control and quota management
+- **Gateway secret validation** — Prevents direct App Service bypass and ensures all traffic flows through the gateway
+- **CORS policy management** — Controlled cross-origin access for web frontends
+- **Request header passthrough** — Tenant and user context forwarded to backend services
+- **Application Insights integration** — API-level telemetry for monitoring and diagnostics
+- **Developer Portal potential** — Self-service API discovery available on Basic v2 tier (not configured in POC but demonstrates platform scalability)
 
 ---
 
@@ -305,8 +318,10 @@ curl -X POST https://app-medrequest-dev.azurewebsites.net/api/requests \
 ```
 patient-comm-app/
 ├── docs/
-│   ├── INTAKE.md                    # Requirements and business context
+│   ├── DEMO-AUTH-DESIGN.md          # Authentication & persona switcher design
+│   ├── MULTI-TENANT-ARCHITECTURE.md # Multi-tenant patterns deep dive
 │   ├── PROJECT-STRUCTURE.md         # Full project design proposal
+│   ├── TESTING.md                   # Testing & deployment runbook
 │   └── api/                         # API documentation & examples
 │
 ├── src/

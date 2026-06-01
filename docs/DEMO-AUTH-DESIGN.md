@@ -1,8 +1,7 @@
 # Demo Authentication Design
 
-**Author:** Rusty  
 **Date:** 2025-01-14  
-**Status:** Proposed  
+**Status:** Implemented  
 **Scope:** Frontend demo/presentation UX  
 
 ## Executive Summary

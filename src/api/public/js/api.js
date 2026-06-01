@@ -10,8 +10,6 @@ const Api = (() => {
   const PROXY_BASE = '/api/proxy';
 
   let baseUrl = DIRECT_BASE;
-  let useApim = false;
-  let apimBaseUrl = null;
 
   async function request(method, path, body, _retried) {
     const url = baseUrl + path;
@@ -62,19 +60,12 @@ const Api = (() => {
         const config = await res.json();
 
         if (config.apim && config.apim.enabled) {
-          apimBaseUrl = config.apim.baseUrl.replace(/\/+$/, '');
-          // Default to direct mode — APIM is opt-in via toggle.
-          useApim = false;
-          baseUrl = DIRECT_BASE;
+          baseUrl = PROXY_BASE;  // Always route through APIM when available
         } else {
-          apimBaseUrl = null;
-          useApim = false;
-          baseUrl = DIRECT_BASE;
+          baseUrl = DIRECT_BASE; // Local dev fallback
         }
       } catch (err) {
-        // If config endpoint is unavailable, fall back to direct mode
         console.warn('Could not load /api/config — using direct API mode:', err.message);
-        useApim = false;
         baseUrl = DIRECT_BASE;
       }
     },
@@ -86,21 +77,6 @@ const Api = (() => {
 
     getBaseUrl() {
       return baseUrl;
-    },
-
-    /** Toggle between APIM gateway (via server proxy) and direct App Service routing. */
-    setApimEnabled(enabled) {
-      useApim = enabled && !!apimBaseUrl;
-      baseUrl = useApim ? PROXY_BASE : DIRECT_BASE;
-    },
-
-    isApimEnabled() {
-      return useApim;
-    },
-
-    /** Returns true if APIM config was loaded (regardless of active state). */
-    isApimAvailable() {
-      return !!apimBaseUrl;
     },
 
     // --- Request CRUD ---
